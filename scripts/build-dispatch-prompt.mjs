@@ -40,8 +40,8 @@ ${routesTable}
    - 子代理定义在 .claude/agents/ 下；engineer 会按 pstack 纪律干活，qa 会把验证报告写入 config/verification/。
 4. ${dryRun
     ? `DRY RUN：把计划（分类结论、规格摘要、验证方案、预估评分）写成 Markdown 文件 plan.md，不要改代码。${issueNumber ? `若环境变量 ISSUE_NUMBER=${issueNumber} 存在，用 gh issue comment ${issueNumber} --body-file plan.md 把计划评论到该 issue。` : '任务不来自 issue，计划保留在 CI 日志即可。'}`
-    : '开 PR：git 提交（conventional commits）→ push 分支 → gh pr create（标题 conventional commits，正文含做了什么/为什么/怎么验证/已知限制，加标签 bot-authored）→ 用 gh pr comment 汇报验证结论。'}
-5. 最后输出：任务分类、子代理编排、验证结论、PR 链接${dryRun ? '' : '、预估信任评分'}。
+    : '直接实现改动：先写失败测试再实现（遵守 pstack 纪律），把改动留在工作区即可。不要执行 git push 或 gh pr create——CI 会用 PAT 统一提交并开 PR（否则 PR 不触发下游验证）。'}
+5. 最后输出：任务分类、子代理编排、验证结论、改动文件清单${dryRun ? '' : '、预估信任评分'}。
 
 纪律：不跳过 qa；不在主干堆细节；验证不了就说验证不了。`;
 

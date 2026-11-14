@@ -16,7 +16,7 @@ on:
         default: true
         type: boolean
   issues:
-    types: [opened, labeled]
+    types: [opened]
 
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
         env:
           TASK: ${{ github.event_name == 'issues' && github.event.issue.title || inputs.task }}
           TASK_BODY: ${{ github.event_name == 'issues' && github.event.issue.body || inputs.task }}
-          DRY_RUN: ${{ github.event_name == 'issues' && 'true' || inputs.dry_run }}
+          DRY_RUN: ${{ github.event_name == 'issues' && 'false' || inputs.dry_run }}
           ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || '' }}
         run: node scripts/build-dispatch-prompt.mjs > dispatch-prompt.txt
 
@@ -67,3 +67,47 @@ jobs:
             --dangerously-skip-permissions \
             --allowedTools "Bash" "Edit" "Write" "Read" "Grep" "Glob" \
             --output-format json --verbose | tee bot-run.json
+
+      # 关键：用 PAT 开 PR 才会触发下游 verify-and-merge（GITHUB_TOKEN 创建的 PR 不触发 workflow）
+      - name: 提交改动并开 PR
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_PAT }}
+          FALLBACK_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'issues' && 'false' || inputs.dry_run }}
+          ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || '' }}
+          TASK_TITLE: ${{ github.event_name == 'issues' && github.event.issue.title || inputs.task }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN：不提交、不开 PR。"
+            exit 0
+          fi
+          # 安全闸门：Bot 不得改动放权配置与 CI 自身
+          git checkout -- config/trust.json .github/ 2>/dev/null || true
+          rm -f plan.md
+          CHANGED=0
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "$TASK_TITLE"
+            CHANGED=1
+          fi
+          if [ -n "$(git rev-list origin/main..HEAD 2>/dev/null)" ]; then CHANGED=1; fi
+          if [ "$CHANGED" = "0" ]; then
+            echo "Bot 未产生有效改动，跳过开 PR。"
+            exit 0
+          fi
+          TOKEN="${BOT_TOKEN:-$FALLBACK_TOKEN}"
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "::warning::未配置 BOT_PAT，使用 GITHUB_TOKEN 开 PR；该 PR 不会自动触发 QA 与评分（Quiet 防递归机制）。"
+          fi
+          BRANCH="bot/issue-${ISSUE_NUMBER:-manual}-$(date +%s)"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "$TASK_TITLE"
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -u origin "$BRANCH"
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          export GH_TOKEN="$TOKEN"
+          gh pr create \
+            --title "$TASK_TITLE" \
+            --body "由首席 Bot 自动生成（issue #${ISSUE_NUMBER:-手动触发}）。QA 验证与信任评分由 CI 自动完成，达标后按 trust.json 的放权级别决定是否自动合并。" \
+            --label bot-authored --base main --head "$BRANCH"

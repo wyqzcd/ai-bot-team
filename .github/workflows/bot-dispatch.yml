@@ -1,0 +1,71 @@
+# Bot 派活：收集上下文 + 分类 + 派活 + 开 PR（CI 里的首席 Bot）
+# 依赖 Secrets：ANTHROPIC_API_KEY
+# 依赖 Variables：BOT_DISPATCH_ON_ISSUE（"true" 时新 issue 自动触发）
+name: Bot 派活
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 任务描述
+        required: true
+        type: string
+      dry_run:
+        description: 只出计划不开 PR
+        required: true
+        default: true
+        type: boolean
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  dispatch:
+    # issue 触发需要仓库变量显式开启；手动触发总是执行
+    if: ${{ github.event_name != 'issues' || vars.BOT_DISPATCH_ON_ISSUE == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 生成派活提示词
+        env:
+          TASK: ${{ github.event_name == 'issues' && github.event.issue.title || inputs.task }}
+          TASK_BODY: ${{ github.event_name == 'issues' && github.event.issue.body || inputs.task }}
+          DRY_RUN: ${{ github.event_name == 'issues' && 'true' || inputs.dry_run }}
+          ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || '' }}
+        run: node scripts/build-dispatch-prompt.mjs > dispatch-prompt.txt
+
+      - name: 运行首席 Bot
+        # 国内用户：配 Secrets.ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（如 DeepSeek 官方端点 https://api.deepseek.com/anthropic），
+        # 模型可通过 Variables.AGENT_MODEL 指定（如 deepseek-v4-pro）
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.ANTHROPIC_AUTH_TOKEN != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.email "bot@ai-bot-team.local"
+          git config user.name "ai-bot-team"
+          if [ -n "${{ secrets.ANTHROPIC_AUTH_TOKEN }}" ]; then
+            export ANTHROPIC_AUTH_TOKEN="${{ secrets.ANTHROPIC_AUTH_TOKEN }}"
+            export ANTHROPIC_BASE_URL="${{ secrets.ANTHROPIC_BASE_URL }}"
+          fi
+          if [ -n "${{ vars.AGENT_MODEL }}" ]; then export ANTHROPIC_MODEL="${{ vars.AGENT_MODEL }}"; fi
+          npm install -g @anthropic-ai/claude-code
+          claude -p "$(cat dispatch-prompt.txt)" \
+            --dangerously-skip-permissions \
+            --allowedTools "Bash" "Edit" "Write" "Read" "Grep" "Glob" \
+            --output-format json --verbose | tee bot-run.json
+
+      - name: 未配置 API Key
+        if: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.ANTHROPIC_AUTH_TOKEN == '' }}
+        run: |
+          echo "未配置 API Key，跳过 Bot 执行。"
+          echo "海外 Claude：Secrets 配 ANTHROPIC_API_KEY；国内：配 ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（DeepSeek/GLM/Kimi 的 Anthropic 兼容端点，见 README 国内使用指南）。"

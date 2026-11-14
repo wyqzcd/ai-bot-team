@@ -1,0 +1,10 @@
+{
+  "name": "bot-team-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ai-bot-team 模板的演示项目：给 Bot 团队练手的字符串小工具",
+  "scripts": {
+    "test": "node --test"
+  }
+}

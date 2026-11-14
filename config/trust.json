@@ -1,0 +1,35 @@
+{
+  "$comment": "渐进放权配置。改这个文件不需要改代码。所有路径支持 glob：** 跨目录，* 单段。directories 按首个匹配优先：具体条目放前面，兜底 ** 放最后。",
+  "owner": "你的GitHub用户名",
+  "autoMergeEnabled": false,
+  "dryRun": true,
+  "mergeMethod": "squash",
+  "botLabels": ["bot-authored"],
+  "blockedLabels": ["bot-review-needed", "do-not-merge"],
+  "levels": [
+    { "level": 0, "minScore": 0, "rule": "全人工：任何 bot PR 都必须人工 review" },
+    { "level": 1, "minScore": 60, "rule": "仅低风险目录（docs/tests）且 CI 全绿才自动合并" },
+    { "level": 2, "minScore": 75, "rule": "中风险及以下目录，且任务类型为 docs/test/chore/fix 才自动合并" },
+    { "level": 3, "minScore": 88, "rule": "任意目录，但改动量必须在安全上限内" }
+  ],
+  "directories": [
+    { "path": "docs/**", "risk": "low" },
+    { "path": "demo/test/**", "risk": "low" },
+    { "path": "demo/src/**", "risk": "medium" },
+    { "path": "config/**", "risk": "high" },
+    { "path": ".github/**", "risk": "high" },
+    { "path": "**", "risk": "high" }
+  ],
+  "taskTypes": [
+    { "type": "docs", "base": 20 },
+    { "type": "test", "base": 15 },
+    { "type": "fix", "base": 10 },
+    { "type": "chore", "base": 5 },
+    { "type": "feat", "base": -5 },
+    { "type": "refactor", "base": -10 }
+  ],
+  "limits": {
+    "maxFiles": { "low": 50, "medium": 30, "high": 10 },
+    "maxLines": { "low": 800, "medium": 500, "high": 200 }
+  }
+}

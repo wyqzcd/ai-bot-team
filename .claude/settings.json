@@ -1,0 +1,22 @@
+{
+  "$comment": "Bot 团队权限配置。本地交互式使用请按需放宽；CI 里由工作流用 --dangerously-skip-permissions 控制。",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+      "Task",
+      "WebFetch",
+      "Bash(npm:*)",
+      "Bash(node:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)"
+    ]
+  }
+}

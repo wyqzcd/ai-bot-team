@@ -1,0 +1,18 @@
+{
+  "$comment": "任务类型 → 子代理编排 + pstack playbook 路由。首席 Bot 按此派活。",
+  "routes": [
+    { "type": "fix", "agents": ["engineer", "qa"], "playbook": "bug-fix", "label": "bot-authored" },
+    { "type": "feat", "agents": ["pm", "engineer", "qa"], "playbook": "feature", "label": "bot-authored" },
+    { "type": "test", "agents": ["engineer", "qa"], "playbook": "tdd", "label": "bot-authored" },
+    { "type": "docs", "agents": ["engineer"], "playbook": "technical-writing", "label": "bot-authored" },
+    { "type": "chore", "agents": ["engineer", "qa"], "playbook": "refactoring", "label": "bot-authored" },
+    { "type": "refactor", "agents": ["pm", "engineer", "qa", "reviewer"], "playbook": "refactoring", "label": "bot-authored" }
+  ],
+  "classificationHints": [
+    { "pattern": "修复|bug|fix|崩溃|报错|异常", "type": "fix" },
+    { "pattern": "新增|支持|feature|实现|添加", "type": "feat" },
+    { "pattern": "重构|refactor|迁移|拆分", "type": "refactor" },
+    { "pattern": "文档|docs|README|注释", "type": "docs" },
+    { "pattern": "测试|test|覆盖|用例", "type": "test" }
+  ]
+}

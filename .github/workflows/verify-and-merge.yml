@@ -33,18 +33,22 @@ jobs:
 
       # 可选：pstack QA Agent 做真实行为验证，把报告写进 config/verification/
       # 国内用户：配 Secrets.ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（DeepSeek 等 Anthropic 兼容端点）
+      # 注意：secrets 不能出现在 if 条件里，凭据缺失在 shell 里判断
       - name: QA Agent 验证（pstack，可选）
         id: qa
-        if: ${{ vars.QA_AGENT_ENABLED == 'true' && (secrets.ANTHROPIC_API_KEY != '' || secrets.ANTHROPIC_AUTH_TOKEN != '') }}
+        if: ${{ vars.QA_AGENT_ENABLED == 'true' }}
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
         run: |
-          if [ -n "${{ secrets.ANTHROPIC_AUTH_TOKEN }}" ]; then
-            export ANTHROPIC_AUTH_TOKEN="${{ secrets.ANTHROPIC_AUTH_TOKEN }}"
-            export ANTHROPIC_BASE_URL="${{ secrets.ANTHROPIC_BASE_URL }}"
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$ANTHROPIC_AUTH_TOKEN" ]; then
+            echo "未配置模型凭据，跳过 QA Agent（评分将按未验证处理）。"
+            exit 0
           fi
-          if [ -n "${{ vars.AGENT_MODEL }}" ]; then export ANTHROPIC_MODEL="${{ vars.AGENT_MODEL }}"; fi
+          if [ -n "$AGENT_MODEL" ]; then export ANTHROPIC_MODEL="$AGENT_MODEL"; fi
           npm install -g @anthropic-ai/claude-code
           claude plugin marketplace add cursor/plugins || true
           claude plugin install pstack@cursor-plugins || true

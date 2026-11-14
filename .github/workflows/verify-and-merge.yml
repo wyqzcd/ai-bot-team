@@ -56,16 +56,26 @@ jobs:
             --dangerously-skip-permissions \
             --allowedTools "Bash" "Read" "Grep" "Glob" "Write"
 
+      # 安全：放权配置只信任 base 分支，防止 PR 自己改 trust.json 提权
+      - name: 取 base 分支放权配置
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$BASE" --depth=1
+          git show "origin/$BASE:config/trust.json" > trust-base.json
+          echo "已从 $BASE 读取放权配置"
+
       - name: 计算信任评分并评论
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERIFIED=${{ steps.qa.outcome == 'success' && 'true' || 'false' }}
           node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+            --config trust-base.json \
             --ci ${{ steps.tests.outcome }} \
             --verified "$VERIFIED" \
             --format markdown > score-comment.md
           node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+            --config trust-base.json \
             --ci ${{ steps.tests.outcome }} \
             --verified "$VERIFIED" > result.json
           gh pr comment ${{ github.event.pull_request.number }} --body-file score-comment.md || true
@@ -87,6 +97,13 @@ jobs:
         with:
           name: trust-score-result
 
+      # 同 verify：只信任 base 分支配置，避免 PR 提权
+      - name: 取 base 分支放权配置
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$BASE" --depth=1
+          git show "origin/$BASE:config/trust.json" > trust-base.json
+
       - name: 决策并执行
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,7 +111,7 @@ jobs:
           PR=${{ github.event.pull_request.number }}
           DECISION=$(jq -r .decision result.json)
           BOT_AUTHORED=$(jq -r .botAuthored result.json)
-          OWNER=$(jq -r .owner config/trust.json)
+          OWNER=$(jq -r .owner trust-base.json)
           echo "决策：$DECISION（bot PR：$BOT_AUTHORED）"
 
           if [ "$BOT_AUTHORED" != "true" ]; then

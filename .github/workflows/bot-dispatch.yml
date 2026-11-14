@@ -101,8 +101,6 @@ jobs:
           fi
           BRANCH="bot/issue-${ISSUE_NUMBER:-manual}-$(date +%s)"
           git checkout -b "$BRANCH"
-          git add -A
-          git commit -m "$TASK_TITLE"
           git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -u origin "$BRANCH"
           git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"

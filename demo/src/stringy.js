@@ -15,9 +15,10 @@ export function slugify(input, keepChinese = false) {
     .replace(/^-|-$/g, '');
 }
 
-/** 超长截断并加省略号；不超过 limit 时原样返回 */
+/** 超长截断并加省略号；不超过 limit 时原样返回。limit 不大于省略号长度时按 limit 硬截断 */
 export function truncate(input, limit = 20, ellipsis = '...') {
   const text = String(input);
   if (text.length <= limit) return text;
+  if (limit <= ellipsis.length) return text.slice(0, Math.max(0, limit));
   return text.slice(0, Math.max(0, limit - ellipsis.length)) + ellipsis;
 }

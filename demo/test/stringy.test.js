@@ -25,6 +25,11 @@ test('slugify 默认仍删除中文字符', () => {
   assert.equal(slugify('你好 World'), 'world');
 });
 
+test('slugify 中文与数字、连字符混排时保持结构', () => {
+  assert.equal(slugify('你好-2026 World', true), '你好-2026-world');
+  assert.equal(slugify('中文_测试 2026', true), '中文-测试-2026');
+});
+
 test('truncate 超长时截断加省略号', () => {
   assert.equal(truncate('abcdefghij', 5), 'ab...');
   assert.equal(truncate('abcdefghijklmnopqrstuvwxyz'), 'abcdefghijklmnopq...');

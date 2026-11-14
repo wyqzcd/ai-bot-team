@@ -1,8 +1,8 @@
 {
   "$comment": "渐进放权配置。改这个文件不需要改代码。所有路径支持 glob：** 跨目录，* 单段。directories 按首个匹配优先：具体条目放前面，兜底 ** 放最后。",
   "owner": "wyqzcd",
-  "autoMergeEnabled": false,
-  "dryRun": true,
+  "autoMergeEnabled": true,
+  "dryRun": false,
   "mergeMethod": "squash",
   "botLabels": ["bot-authored"],
   "blockedLabels": ["bot-review-needed", "do-not-merge"],

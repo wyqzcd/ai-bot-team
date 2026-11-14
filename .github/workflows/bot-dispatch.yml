@@ -44,28 +44,26 @@ jobs:
         run: node scripts/build-dispatch-prompt.mjs > dispatch-prompt.txt
 
       - name: 运行首席 Bot
-        # 国内用户：配 Secrets.ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（如 DeepSeek 官方端点 https://api.deepseek.com/anthropic），
+        # 国内用户：配 Secrets.ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（如 DeepSeek 官方端点 https://api.deepseek.com/anthropic）
         # 模型可通过 Variables.AGENT_MODEL 指定（如 deepseek-v4-pro）
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.ANTHROPIC_AUTH_TOKEN != '' }}
+        # 注意：secrets 不能出现在 if 条件里（Actions 解析期会整条 workflow 失效），只能在 shell 里判断
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$ANTHROPIC_AUTH_TOKEN" ]; then
+            echo "未配置凭据，跳过 Bot 执行。"
+            echo "海外 Claude：Secrets 配 ANTHROPIC_API_KEY；国内：配 ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（见 README 国内使用指南）。"
+            exit 0
+          fi
           git config user.email "bot@ai-bot-team.local"
           git config user.name "ai-bot-team"
-          if [ -n "${{ secrets.ANTHROPIC_AUTH_TOKEN }}" ]; then
-            export ANTHROPIC_AUTH_TOKEN="${{ secrets.ANTHROPIC_AUTH_TOKEN }}"
-            export ANTHROPIC_BASE_URL="${{ secrets.ANTHROPIC_BASE_URL }}"
-          fi
-          if [ -n "${{ vars.AGENT_MODEL }}" ]; then export ANTHROPIC_MODEL="${{ vars.AGENT_MODEL }}"; fi
+          if [ -n "$AGENT_MODEL" ]; then export ANTHROPIC_MODEL="$AGENT_MODEL"; fi
           npm install -g @anthropic-ai/claude-code
           claude -p "$(cat dispatch-prompt.txt)" \
             --dangerously-skip-permissions \
             --allowedTools "Bash" "Edit" "Write" "Read" "Grep" "Glob" \
             --output-format json --verbose | tee bot-run.json
-
-      - name: 未配置 API Key
-        if: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.ANTHROPIC_AUTH_TOKEN == '' }}
-        run: |
-          echo "未配置 API Key，跳过 Bot 执行。"
-          echo "海外 Claude：Secrets 配 ANTHROPIC_API_KEY；国内：配 ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（DeepSeek/GLM/Kimi 的 Anthropic 兼容端点，见 README 国内使用指南）。"

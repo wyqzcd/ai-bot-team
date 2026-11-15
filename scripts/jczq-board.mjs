@@ -8,7 +8,7 @@
  * - 由 handicap 符号确定让球方；整数一球盘下 RQSPF 三项是让球方结果的三段划分。
  * - support 只做展示，不参与任何计算、排序或分组。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -64,8 +64,10 @@ const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
   node scripts/jczq-board.mjs --fixture <path>      读取指定 JSON（相对仓库根，也接受绝对路径）
   node scripts/jczq-board.mjs --live                从官方 JSON 接口抓取实时数据
   node scripts/jczq-board.mjs --help                显示本帮助
+  --dry-run                                         只输出一行 JSON 摘要，不写任何文件
+  --out <path>                                      报告写到指定路径（相对当前 cwd 解析）
 
-输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
+默认输出 reports/<fixture.date>.html（与 cwd 无关）。
 --live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）。
 环境变量：
   JCZQ_NOW       覆盖生成时间 generatedAt（带时区 ISO，便于复现）
@@ -483,6 +485,34 @@ export function analyzeFixture(fixture) {
   };
 }
 
+const DRY_RUN_GROUPS = ['win_cover', 'win_no_cover', 'lose_cover', 'lose_no_cover'];
+
+/** --dry-run 的机器可读摘要：groups 固定五键，other = no_handicap + ambiguous。 */
+function summarizeForDryRun(report) {
+  const unclassified = report.unclassified ?? [];
+  const skipped = report.skipped ?? 0;
+  const groups = { win_cover: 0, win_no_cover: 0, lose_cover: 0, lose_no_cover: 0, other: 0 };
+  for (const match of report.matches) {
+    if (DRY_RUN_GROUPS.includes(match.group)) groups[match.group] += 1;
+    else groups.other += 1;
+  }
+  return {
+    oddsUpdatedAt: report.oddsUpdatedAt,
+    totalCount: report.totalCount ?? report.matches.length + unclassified.length + skipped,
+    matches: report.matches.length,
+    unclassified: unclassified.length,
+    skipped,
+    groups,
+    likelyDraw:
+      report.likelyDraw === null
+        ? null
+        : {
+            probability: report.likelyDraw.probability,
+            nos: report.likelyDraw.matches.map((match) => match.no),
+          },
+  };
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => {
     switch (character) {
@@ -776,6 +806,27 @@ ${report.unclassified.length ? `<li>本日数据不足（未分类）场次：${
 `;
 }
 
+/** --out 预检：父目录必须已存在且是目录，目标若存在不得是目录；不做任何写操作。 */
+function assertOutPathUsable(outPath) {
+  const parent = path.dirname(outPath);
+  let parentStat;
+  try {
+    parentStat = statSync(parent);
+  } catch {
+    usageError(`--out 父目录不存在：${parent}`);
+  }
+  if (!parentStat.isDirectory()) usageError(`--out 父路径不是目录：${parent}`);
+
+  let targetStat;
+  try {
+    targetStat = statSync(outPath);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    usageError(`无法检查 --out 目标：${outPath}（${error.message}）`);
+  }
+  if (targetStat.isDirectory()) usageError(`--out 目标已存在且是目录：${outPath}`);
+}
+
 /** 解析 CLI 参数；非法时抛 BoardError(E_USAGE)。 */
 export function parseArgs(argv) {
   if (!Array.isArray(argv)) usageError('参数必须是数组');
@@ -788,8 +839,10 @@ export function parseArgs(argv) {
 
   let fixture;
   let date;
+  let out;
   let live = false;
   let help = false;
+  let dryRun = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -799,7 +852,10 @@ export function parseArgs(argv) {
     } else if (arg === '--live') {
       mark('live');
       live = true;
-    } else if (arg === '--fixture' || arg === '--date') {
+    } else if (arg === '--dry-run') {
+      mark('dry-run');
+      dryRun = true;
+    } else if (arg === '--fixture' || arg === '--date' || arg === '--out') {
       const key = arg.slice(2);
       mark(key);
       const value = argv[index + 1];
@@ -808,7 +864,8 @@ export function parseArgs(argv) {
       }
       index += 1;
       if (key === 'fixture') fixture = value;
-      else date = value;
+      else if (key === 'date') date = value;
+      else out = path.resolve(process.cwd(), value);
     } else if (arg.startsWith('-')) {
       usageError(`未知参数：${arg}`);
     } else {
@@ -825,13 +882,19 @@ export function parseArgs(argv) {
 
   if (modes.length === 0) usageError('缺少模式：需要 --date、--fixture 或 --live 之一');
   if (modes.length > 1) usageError('--date、--fixture、--live、--help 不能同时使用（必须恰好一种模式）');
-  if (help) return { mode: 'help' };
-  if (live) return { mode: 'live' };
-  if (date !== undefined) {
-    if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
-    return { mode: 'date', date };
-  }
-  return { mode: 'fixture', fixture };
+  if (help && (dryRun || out !== undefined)) usageError('--help 不能与 --dry-run 或 --out 组合');
+  if (dryRun && out !== undefined) usageError('--dry-run 与 --out 互斥');
+  if (date !== undefined && !isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
+  if (out !== undefined) assertOutPathUsable(out);
+
+  let result;
+  if (help) result = { mode: 'help' };
+  else if (live) result = { mode: 'live' };
+  else if (date !== undefined) result = { mode: 'date', date };
+  else result = { mode: 'fixture', fixture };
+  if (dryRun) result.dryRun = true;
+  if (out !== undefined) result.out = out;
+  return result;
 }
 
 function readFixtureFile(absolutePath) {
@@ -1077,6 +1140,13 @@ async function main(argv) {
   }
 
   const report = analyzeFixture(fixture);
+
+  // --dry-run：抓取/读取 → 映射 → validate → analyze 全部完成后只吐一行摘要，任何文件都不写。
+  if (args.dryRun) {
+    process.stdout.write(`${JSON.stringify(summarizeForDryRun(report))}\n`);
+    return 0;
+  }
+
   const html = renderHtml(report);
 
   // 顺序：解析 → 映射 → validate → 渲染 → 写快照 → 写报告。
@@ -1091,7 +1161,7 @@ async function main(argv) {
     }
   }
 
-  const outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
+  const outputPath = args.out ?? path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, html, 'utf8');
   process.stdout.write(`已生成报告：${outputPath}\n`);

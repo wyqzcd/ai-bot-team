@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +55,57 @@ function runCli(args, env = {}) {
     timeout: 15000,
     env: { ...process.env, ...env },
   });
+}
+
+const SUMMARY_KEYS = ['oddsUpdatedAt', 'totalCount', 'matches', 'unclassified', 'skipped', 'groups', 'likelyDraw'];
+const GROUP_KEYS = ['win_cover', 'win_no_cover', 'lose_cover', 'lose_no_cover', 'other'];
+
+/** 目录内所有普通文件的 md5 与 mtime，用于断言「没有文件被写」。 */
+function snapshotDir(dir) {
+  const snapshot = {};
+  for (const name of readdirSync(dir).sort()) {
+    const file = path.join(dir, name);
+    const stat = statSync(file);
+    if (!stat.isFile()) continue;
+    snapshot[name] = {
+      md5: createHash('md5').update(readFileSync(file)).digest('hex'),
+      mtimeMs: stat.mtimeMs,
+    };
+  }
+  return snapshot;
+}
+
+/** 断言 stdout 恰好一行 JSON + 换行，返回解析结果。 */
+function parseSingleLineJson(stdout) {
+  assert.ok(stdout.endsWith('\n'), 'stdout 必须以换行结尾');
+  const lines = stdout.split('\n');
+  assert.equal(lines.length, 2, `stdout 必须恰好一行，实际 ${lines.length - 1} 行`);
+  assert.equal(lines[1], '');
+  return JSON.parse(lines[0]);
+}
+
+/** 独立于 mapLiveResponse 从官方原文推导已开售场次构成。 */
+function liveExpectedCounts(raw) {
+  const selling = [];
+  let skipped = 0;
+  for (const group of raw.value.matchInfoList) {
+    for (const sub of group.subMatchList) {
+      const hidden = (sub.matchStatus !== undefined && sub.matchStatus !== 'Selling') || sub.isHide === 1 || sub.isHide === true;
+      if (hidden) skipped += 1;
+      else selling.push(sub);
+    }
+  }
+  const completeMarket = (market) =>
+    market !== undefined &&
+    market !== null &&
+    ['h', 'd', 'a'].every((key) => market[key] !== undefined && market[key] !== null && String(market[key]).trim() !== '');
+  const matches = selling.filter((sub) => completeMarket(sub.had) && completeMarket(sub.hhad)).length;
+  return {
+    totalCount: raw.value.totalCount,
+    matches,
+    unclassified: selling.length - matches,
+    skipped,
+  };
 }
 
 function approx(actual, expected, tolerance = 1e-6) {
@@ -824,4 +886,228 @@ test('--live 响应不是 JSON 退出码 6', () => {
   assert.equal(result.status, 6);
   assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
   assert.match(result.stderr, /不是 JSON/);
+});
+
+test('parseArgs 默认形状不变，并支持 --dry-run / --out', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-out-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const outFile = path.join(dir, 'board.html');
+
+  assert.deepEqual(parseArgs(['--date', '2026-11-15']), { mode: 'date', date: '2026-11-15' });
+  assert.deepEqual(parseArgs(['--fixture', 'fixtures/2026-11-15.json']), {
+    mode: 'fixture',
+    fixture: 'fixtures/2026-11-15.json',
+  });
+  assert.deepEqual(parseArgs(['--live']), { mode: 'live' });
+  assert.deepEqual(parseArgs(['--help']), { mode: 'help' });
+  assert.deepEqual(parseArgs(['--live', '--dry-run']), { mode: 'live', dryRun: true });
+  assert.deepEqual(parseArgs(['--fixture', 'x.json', '--out', outFile]), {
+    mode: 'fixture',
+    fixture: 'x.json',
+    out: path.resolve(outFile),
+  });
+
+  const relative = path.relative(process.cwd(), outFile);
+  assert.equal(parseArgs(['--live', '--out', relative]).out, path.resolve(outFile));
+  assert.equal(parseArgs(['--live', '--out', outFile]).out, path.resolve(outFile));
+});
+
+test('parseArgs 拒绝新增选项的重复/缺值/互斥/help 组合与非法 --out 目标', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-out-bad-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const plainFile = path.join(dir, 'plain.txt');
+  writeFileSync(plainFile, 'x', 'utf8');
+  const targetDir = path.join(dir, 'target-dir');
+  mkdirSync(targetDir);
+  const missingParent = path.join(dir, 'missing', 'board.html');
+
+  const bad = [
+    ['--live', '--dry-run', '--dry-run'],
+    ['--live', '--out', path.join(dir, 'a.html'), '--out', path.join(dir, 'b.html')],
+    ['--live', '--out'],
+    ['--live', '--out', ''],
+    ['--live', '--out', '--dry-run'],
+    ['--live', '--dry-run', '--out', path.join(dir, 'x.html')],
+    ['--help', '--dry-run'],
+    ['--help', '--out', path.join(dir, 'x.html')],
+    ['--live', '--out', missingParent],
+    ['--live', '--out', path.join(plainFile, 'x.html')],
+    ['--live', '--out', targetDir],
+    [`--live`, `--out=${path.join(dir, 'x.html')}`],
+    ['--live', '-o', path.join(dir, 'x.html')],
+  ];
+  for (const argv of bad) {
+    assert.throws(
+      () => parseArgs(argv),
+      (err) => err instanceof BoardError && err.code === 'E_USAGE',
+      `应拒绝 ${JSON.stringify(argv)}`,
+    );
+  }
+  assert.ok(!existsSync(path.join(dir, 'missing')), '预检不得创建父目录');
+});
+
+test('CLI --fixture --dry-run 输出单行摘要且不写任何文件', (t) => {
+  const reportsDir = path.join(REPO_ROOT, 'reports');
+  const fixturesDir = path.join(REPO_ROOT, 'fixtures');
+  const beforeReports = snapshotDir(reportsDir);
+  const beforeFixtures = snapshotDir(fixturesDir);
+  const previous = process.env.JCZQ_NOW;
+  t.after(() => {
+    if (previous === undefined) delete process.env.JCZQ_NOW;
+    else process.env.JCZQ_NOW = previous;
+  });
+
+  const result = runCli(['--fixture', FIXTURE_PATH, '--dry-run'], { JCZQ_NOW: NOW });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const summary = parseSingleLineJson(result.stdout);
+
+  assert.deepEqual(Object.keys(summary).sort(), [...SUMMARY_KEYS].sort());
+  assert.equal(typeof summary.oddsUpdatedAt, 'string');
+  assert.equal(summary.oddsUpdatedAt, FIXTURE.oddsUpdatedAt);
+  for (const key of ['totalCount', 'matches', 'unclassified', 'skipped']) {
+    assert.ok(Number.isInteger(summary[key]) && summary[key] >= 0, `${key} 必须是非负整数`);
+  }
+  assert.deepEqual(Object.keys(summary.groups).sort(), [...GROUP_KEYS].sort());
+  for (const key of GROUP_KEYS) {
+    assert.ok(Number.isInteger(summary.groups[key]) && summary.groups[key] >= 0, `groups.${key} 必须是非负整数`);
+  }
+
+  const expectedTotal =
+    FIXTURE.totalCount ?? FIXTURE.matches.length + (FIXTURE.unclassified ?? []).length + (FIXTURE.skipped ?? 0);
+  assert.equal(summary.totalCount, expectedTotal);
+  assert.equal(summary.matches, FIXTURE.matches.length);
+  assert.equal(summary.unclassified, (FIXTURE.unclassified ?? []).length);
+  assert.equal(summary.skipped, FIXTURE.skipped ?? 0);
+
+  const groupSum = GROUP_KEYS.reduce((sum, key) => sum + summary.groups[key], 0);
+  assert.equal(groupSum, summary.matches, 'groups 五值之和必须等于 matches');
+  assert.equal(groupSum + summary.unclassified + summary.skipped, summary.totalCount);
+  assert.deepEqual(summary.likelyDraw, { probability: summary.likelyDraw.probability, nos: ['周日001'] });
+  assert.equal(typeof summary.likelyDraw.probability, 'number');
+
+  assert.deepEqual(snapshotDir(reportsDir), beforeReports);
+  assert.deepEqual(snapshotDir(fixturesDir), beforeFixtures);
+});
+
+test('CLI --live --dry-run 用本地 JSON 快照完成抓取但不落盘', () => {
+  const rawText = readFileSync(LIVE_RAW_PATH, 'utf8');
+  const url = `data:application/json,${encodeURIComponent(rawText)}`;
+  const reportsDir = path.join(REPO_ROOT, 'reports');
+  const fixturesDir = path.join(REPO_ROOT, 'fixtures');
+  const beforeReports = snapshotDir(reportsDir);
+  const beforeFixtures = snapshotDir(fixturesDir);
+
+  const result = runCli(['--live', '--dry-run'], { JCZQ_LIVE_URL: url, JCZQ_NOW: NOW });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const summary = parseSingleLineJson(result.stdout);
+
+  const expected = liveExpectedCounts(LIVE_RAW);
+  assert.equal(summary.totalCount, expected.totalCount);
+  assert.equal(summary.matches, expected.matches);
+  assert.equal(summary.unclassified, expected.unclassified);
+  assert.equal(summary.skipped, expected.skipped);
+  assert.equal(summary.oddsUpdatedAt, `${LIVE_RAW.value.lastUpdateTime.replace(' ', 'T')}+08:00`);
+
+  const groupSum = GROUP_KEYS.reduce((sum, key) => sum + summary.groups[key], 0);
+  assert.equal(groupSum, summary.matches);
+  assert.equal(groupSum + summary.unclassified + summary.skipped, summary.totalCount);
+  assert.ok(summary.likelyDraw, '当前快照应存在可能平局');
+  assert.equal(typeof summary.likelyDraw.probability, 'number');
+  assert.ok(Array.isArray(summary.likelyDraw.nos) && summary.likelyDraw.nos.length > 0);
+  assert.equal(new Set(summary.likelyDraw.nos).size, summary.likelyDraw.nos.length, 'nos 不得重复');
+
+  assert.deepEqual(snapshotDir(reportsDir), beforeReports);
+  assert.deepEqual(snapshotDir(fixturesDir), beforeFixtures);
+});
+
+test('CLI --live --dry-run 抓取失败退出 6，stdout 为空且不写文件', () => {
+  const reportsDir = path.join(REPO_ROOT, 'reports');
+  const fixturesDir = path.join(REPO_ROOT, 'fixtures');
+  const beforeReports = snapshotDir(reportsDir);
+  const beforeFixtures = snapshotDir(fixturesDir);
+
+  const result = runCli(['--live', '--dry-run'], { JCZQ_LIVE_URL: 'http://127.0.0.1:1/', JCZQ_NOW: NOW });
+  assert.equal(result.status, 6);
+  assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
+  assert.equal(result.stdout, '');
+  assert.deepEqual(snapshotDir(reportsDir), beforeReports);
+  assert.deepEqual(snapshotDir(fixturesDir), beforeFixtures);
+});
+
+test('CLI --dry-run fixture schema 非法退出 5，stdout 为空且不写文件', (t) => {
+  const bad = cloneFixture();
+  bad.matches[0].spf = [2.32, 3.1];
+  const file = tempFixture(t, bad);
+  const reportsDir = path.join(REPO_ROOT, 'reports');
+  const fixturesDir = path.join(REPO_ROOT, 'fixtures');
+  const beforeReports = snapshotDir(reportsDir);
+  const beforeFixtures = snapshotDir(fixturesDir);
+
+  const result = runCli(['--fixture', file, '--dry-run']);
+  assert.equal(result.status, 5);
+  assert.match(result.stderr, /\[E_FIXTURE_SCHEMA\]/);
+  assert.equal(result.stdout, '');
+  assert.deepEqual(snapshotDir(reportsDir), beforeReports);
+  assert.deepEqual(snapshotDir(fixturesDir), beforeFixtures);
+});
+
+test('CLI --live --out 写到指定路径，不动 reports/ 并恢复快照', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-out-live-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const outFile = path.join(dir, 'board.html');
+  const rawText = readFileSync(LIVE_RAW_PATH, 'utf8');
+  const url = `data:application/json,${encodeURIComponent(rawText)}`;
+  const snapshotPath = path.join(REPO_ROOT, 'fixtures', '2026-11-15.live-raw.json');
+  const originalBytes = readFileSync(snapshotPath);
+  const originalStat = statSync(snapshotPath);
+  const reportsDir = path.join(REPO_ROOT, 'reports');
+  const beforeReports = snapshotDir(reportsDir);
+
+  try {
+    const result = runCli(['--live', '--out', outFile], { JCZQ_LIVE_URL: url, JCZQ_NOW: NOW });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.equal(result.stdout, `已生成报告：${outFile}\n`);
+    assert.ok(existsSync(outFile), '报告必须写到 --out 指定路径');
+    const html = readFileSync(outFile, 'utf8');
+    assert.ok(html.length > 0);
+    assert.ok(html.startsWith('<!doctype html>'));
+    assert.deepEqual(snapshotDir(reportsDir), beforeReports, 'reports/ 不得被改动');
+    assert.ok(existsSync(snapshotPath), '--live 仍应写官方快照');
+  } finally {
+    writeFileSync(snapshotPath, originalBytes);
+    utimesSync(snapshotPath, originalStat.atime, originalStat.mtime);
+  }
+});
+
+test('CLI --out 用法错误退出 2 且不创建父目录/不写文件', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-out-err-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const plainFile = path.join(dir, 'plain.txt');
+  writeFileSync(plainFile, 'x', 'utf8');
+  const targetDir = path.join(dir, 'target-dir');
+  mkdirSync(targetDir);
+  const missingDir = path.join(dir, 'missing');
+
+  const cases = [
+    ['--fixture', FIXTURE_PATH, '--out', path.join(missingDir, 'board.html')],
+    ['--fixture', FIXTURE_PATH, '--out'],
+    ['--fixture', FIXTURE_PATH, '--out', ''],
+    ['--fixture', FIXTURE_PATH, '--dry-run', '--out', path.join(dir, 'x.html')],
+    ['--fixture', FIXTURE_PATH, '--out', targetDir],
+    ['--fixture', FIXTURE_PATH, '--out', path.join(plainFile, 'x.html')],
+    ['--help', '--dry-run'],
+    ['--help', '--out', path.join(dir, 'x.html')],
+  ];
+  for (const argv of cases) {
+    const before = snapshotDir(dir);
+    const result = runCli(argv);
+    assert.equal(result.status, 2, JSON.stringify(argv));
+    assert.match(result.stderr, /\[E_USAGE\]/);
+    assert.equal(result.stdout, '');
+    assert.ok(!existsSync(missingDir), '父目录不得被创建');
+    assert.deepEqual(snapshotDir(dir), before, '不得写出任何文件');
+  }
 });

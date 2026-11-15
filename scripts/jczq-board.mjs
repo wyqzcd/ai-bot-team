@@ -45,8 +45,17 @@ const FOUR_GROUPS = [
 ];
 const LOSE_COVER_EMPTY_NOTE =
   '整数一球盘下，输 1 球为走盘（让球平），受让方输球不可能赢盘；真正的「输球赢盘」需要半盘。本批无半盘，该组恒为空，未硬凑场次、未虚构半盘。';
+const MISSING_CELL = '未开售（官方未提供）';
 const DEFAULT_LIVE_URL =
   'https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&channel=c';
+
+/** 官方接口有反爬：必须带桌面浏览器 UA 与官方 referer，否则返回 567 HTML。 */
+export const LIVE_HEADERS = {
+  'user-agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  referer: 'https://www.sporttery.cn/jc/jsq/zqspf/',
+  accept: 'application/json, text/plain, */*',
+};
 
 const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
 
@@ -57,6 +66,7 @@ const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
   node scripts/jczq-board.mjs --help                显示本帮助
 
 输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
+--live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）。
 环境变量：
   JCZQ_NOW       覆盖生成时间 generatedAt（带时区 ISO，便于复现）
   JCZQ_LIVE_URL  覆盖 --live 的抓取地址
@@ -97,6 +107,24 @@ function isIsoDate(value) {
 function isIsoWithTimezone(value) {
   if (typeof value !== 'string' || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
   return !Number.isNaN(Date.parse(value));
+}
+
+/**
+ * 固定输出 YYYY-MM-DDTHH:mm:ss+08:00，与宿主时区无关：
+ * 用 UTC 毫秒 +8h 后切片，不使用 toLocaleString。
+ */
+export function formatPlus08(input) {
+  let milliseconds;
+  if (input === undefined) milliseconds = Date.now();
+  else if (input instanceof Date) milliseconds = input.getTime();
+  else if (typeof input === 'number') milliseconds = input;
+  else if (typeof input === 'string') milliseconds = Date.parse(input);
+  else throw new RangeError(`formatPlus08: 输入必须是 Date、时间戳或 ISO 字符串（${String(input)}）`);
+  if (!Number.isFinite(milliseconds)) {
+    throw new RangeError(`formatPlus08: 非法时间输入（${String(input)}）`);
+  }
+  const shifted = new Date(milliseconds + 8 * 60 * 60 * 1000);
+  return `${shifted.toISOString().slice(0, 19)}+08:00`;
 }
 
 /** 赔率去水：仅对非 null 项归一化，null 原样保留。 */
@@ -329,6 +357,48 @@ function validatePending(pending) {
   });
 }
 
+/**
+ * 数据不足条目：恰好一个市场缺失（null），另一市场保留原值；
+ * 允许整数 |h|≥2（如 008 的 -4），因为它不参与分类口径。
+ */
+function validateUnclassified(item, index, seenNos) {
+  if (!isPlainObject(item)) schemaError(`数据不足条目 #${index + 1} 必须是对象`);
+  const where = isNonEmptyString(item.no) ? `数据不足条目 ${item.no}` : `数据不足条目 #${index + 1}`;
+  for (const field of ['no', 'league', 'home', 'away']) {
+    if (!isNonEmptyString(item[field])) schemaError(`${where} 字段 ${field} 必须是非空字符串`);
+  }
+  if (seenNos.has(item.no)) schemaError(`场次 no 重复：${item.no}（字段 no）`);
+  seenNos.add(item.no);
+
+  if (!isIsoWithTimezone(item.kickoff)) {
+    schemaError(`${where} 字段 kickoff 必须是带时区的 ISO 时间`);
+  }
+
+  const hasSpf = item.spf !== null && item.spf !== undefined;
+  const hasRqspf = item.rqspf !== null && item.rqspf !== undefined;
+  if (!hasSpf && !hasRqspf) schemaError(`${where} 的 spf 与 rqspf 不能同时缺失`);
+  if (hasSpf) validateOdds3(item.spf, where, 'spf');
+  if (hasRqspf) validateOdds3(item.rqspf, where, 'rqspf');
+
+  if (item.handicap !== null && item.handicap !== undefined) {
+    const handicap = item.handicap;
+    if (
+      typeof handicap !== 'number' ||
+      !Number.isFinite(handicap) ||
+      !Number.isInteger(handicap * 2) ||
+      Math.abs(handicap) > 5
+    ) {
+      schemaError(`${where} 字段 handicap 必须是 0.5 的倍数且 |handicap| ≤ 5`);
+    }
+  } else if (hasRqspf) {
+    schemaError(`${where} 缺少 handicap（RQSPF 已开售时必须提供让球）`);
+  }
+
+  if (item.note !== undefined && typeof item.note !== 'string') {
+    schemaError(`${where} 字段 note 必须是字符串`);
+  }
+}
+
 /** 校验 fixture 结构与赔率；失败抛 BoardError(E_FIXTURE_SCHEMA)。 */
 export function validateFixture(fixture, { date } = {}) {
   if (!isPlainObject(fixture)) schemaError('fixture 必须是 JSON 对象');
@@ -347,10 +417,37 @@ export function validateFixture(fixture, { date } = {}) {
   }
   if (!Array.isArray(fixture.matches)) schemaError('fixture.matches 必须是数组');
   if (!Array.isArray(fixture.pending)) schemaError('fixture.pending 必须是数组');
+  if (fixture.unclassified !== undefined && !Array.isArray(fixture.unclassified)) {
+    schemaError('fixture.unclassified 必须是数组');
+  }
+  if (
+    fixture.totalCount !== undefined &&
+    (typeof fixture.totalCount !== 'number' || !Number.isInteger(fixture.totalCount) || fixture.totalCount < 0)
+  ) {
+    schemaError('fixture.totalCount 必须是非负整数');
+  }
+  if (
+    fixture.skipped !== undefined &&
+    (typeof fixture.skipped !== 'number' || !Number.isInteger(fixture.skipped) || fixture.skipped < 0)
+  ) {
+    schemaError('fixture.skipped 必须是非负整数');
+  }
 
   const seenNos = new Set();
   fixture.matches.forEach((match, index) => validateMatch(match, index, seenNos));
+  const unclassified = fixture.unclassified ?? [];
+  unclassified.forEach((item, index) => validateUnclassified(item, index, seenNos));
   validatePending(fixture.pending);
+
+  if (fixture.totalCount !== undefined) {
+    const skipped = fixture.skipped ?? 0;
+    const sum = fixture.matches.length + unclassified.length + skipped;
+    if (sum !== fixture.totalCount) {
+      schemaError(
+        `不变式不成立：matches(${fixture.matches.length}) + unclassified(${unclassified.length}) + skipped(${skipped}) = ${sum}，与 totalCount=${fixture.totalCount} 不一致`,
+      );
+    }
+  }
 
   return true;
 }
@@ -358,12 +455,12 @@ export function validateFixture(fixture, { date } = {}) {
 function currentTimestamp() {
   const override = process.env.JCZQ_NOW;
   if (override !== undefined && override !== '') {
-    if (Number.isNaN(Date.parse(override))) {
-      throw new BoardError('E_INTERNAL', `JCZQ_NOW 不是合法时间：${override}`);
+    if (!isIsoWithTimezone(override)) {
+      throw new BoardError('E_INTERNAL', `JCZQ_NOW 必须是带时区的 ISO 时间：${override}`);
     }
-    return override;
+    return formatPlus08(override);
   }
-  return new Date().toISOString();
+  return formatPlus08();
 }
 
 /** 生成看板数据（不含 HTML）。 */
@@ -378,6 +475,9 @@ export function analyzeFixture(fixture) {
     note: fixture.note,
     generatedAt: currentTimestamp(),
     matches,
+    unclassified: fixture.unclassified ?? [],
+    totalCount: fixture.totalCount,
+    skipped: fixture.skipped ?? 0,
     likelyDraw: findLikelyDraw(matches),
     pending: fixture.pending,
   };
@@ -424,10 +524,17 @@ function groupItems(report, groupId) {
   return report.matches.filter((match) => match.group === groupId);
 }
 
+function allIntegerOneBall(matches) {
+  return (
+    matches.length > 0 &&
+    matches.every((match) => match.handicapInfo.isInteger && match.handicapInfo.goals === 1)
+  );
+}
+
 function renderGroupSection(groupId, label, items, extraEmptyNote, drawProbability) {
   let body;
   if (items.length === 0) {
-    body = '<p class="empty">本组无场次</p>';
+    body = '<p class="empty">本日无此类（0 场）</p>';
     if (extraEmptyNote) body += `<p class="empty">${escapeHtml(extraEmptyNote)}</p>`;
   } else {
     const list = items
@@ -443,12 +550,14 @@ function renderGroupSection(groupId, label, items, extraEmptyNote, drawProbabili
 
 function renderStructure(report) {
   const matches = report.matches;
+  const unclassified = report.unclassified ?? [];
   const integerMatches = matches.filter((match) => match.handicapInfo.isInteger);
   const halfMatches = matches.filter((match) => !match.handicapInfo.isInteger);
-  const allIntegerOneBall =
-    matches.length > 0 &&
-    integerMatches.length === matches.length &&
-    matches.every((match) => match.handicapInfo.isInteger && match.handicapInfo.goals === 1);
+  const sellingCount = matches.length + unclassified.length;
+  const totalCountLine =
+    report.totalCount !== undefined
+      ? `<li>官方 totalCount：${escapeHtml(report.totalCount)} 场（可分类 ${matches.length} 场；数据不足 ${unclassified.length} 场；跳过 ${escapeHtml(report.skipped ?? 0)} 场）</li>`
+      : '';
   const highConfidence = matches.filter((match) => match.highConfidence);
   const ambiguous = matches.filter((match) => match.group === 'ambiguous');
   const noHandicap = matches.filter((match) => match.group === 'no_handicap');
@@ -466,8 +575,9 @@ function renderStructure(report) {
 
   return `<section id="structure"><h2>结构性判断</h2>
 <ul>
-<li>是否全为整数一球盘：${allIntegerOneBall ? '是' : '否'}</li>
-<li>已开售场次：${matches.length} 场（整数盘：${integerMatches.length} 场，半盘：${halfMatches.length} 场）</li>
+<li>是否全为整数一球盘：${allIntegerOneBall(matches) ? '是' : '否'}</li>
+<li>已开售场次：${sellingCount} 场（整数盘：${integerMatches.length} 场，半盘：${halfMatches.length} 场）</li>
+${totalCountLine}
 <li>高置信场次：${highConfidence.length} 场</li>
 </ul>
 ${highList}
@@ -528,14 +638,54 @@ function renderPending(report) {
 </table></section>`;
 }
 
+function unclassifiedHandicapText(handicap) {
+  if (handicap === null || handicap === undefined) return MISSING_CELL;
+  if (handicap === 0) return '无让球（平手）';
+  return handicap < 0 ? `主让 ${Math.abs(handicap)} 球` : `主受让 ${handicap} 球`;
+}
+
+function unclassifiedOddsText(odds) {
+  if (!Array.isArray(odds)) return MISSING_CELL;
+  return odds.map(fixedOdds).join(' / ');
+}
+
+/** 数据不足（未分类）：官方未开售单一市场，不参与任何分类或推断。 */
+function renderUnclassified(report) {
+  const items = report.unclassified ?? [];
+  if (items.length === 0) {
+    return '<section id="unclassified"><h2>数据不足（未分类）</h2><p class="empty">本日无此类（0 场）</p></section>';
+  }
+  const rows = items
+    .map((item) => {
+      const cells = [
+        escapeHtml(item.no),
+        escapeHtml(item.league),
+        `${escapeHtml(item.home)} VS ${escapeHtml(item.away)}`,
+        escapeHtml(item.kickoff),
+        escapeHtml(unclassifiedHandicapText(item.handicap)),
+        escapeHtml(unclassifiedOddsText(item.spf)),
+        escapeHtml(unclassifiedOddsText(item.rqspf)),
+        escapeHtml(item.note ?? ''),
+      ];
+      return `<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
+    })
+    .join('');
+  return `<section id="unclassified"><h2>数据不足（未分类）</h2>
+<table>
+<thead><tr><th>编号</th><th>联赛</th><th>对阵</th><th>开赛时间</th><th>让球</th><th>SPF</th><th>RQSPF</th><th>说明</th></tr></thead>
+<tbody>${rows}</tbody>
+</table></section>`;
+}
+
 /** 渲染单文件 HTML；所有动态文本均转义，无外链。 */
 export function renderHtml(report) {
+  const onlyIntegerOneBall = allIntegerOneBall(report.matches);
   const mergedGroups = FOUR_GROUPS.map(([groupId, label]) =>
     renderGroupSection(
       groupId,
       label,
       groupItems(report, groupId),
-      groupId === 'lose_cover' ? LOSE_COVER_EMPTY_NOTE : null,
+      groupId === 'lose_cover' && onlyIntegerOneBall ? LOSE_COVER_EMPTY_NOTE : null,
       false,
     ),
   ).join('');
@@ -593,6 +743,7 @@ ${renderStructure(report)}
 ${mergedGroups}
 ${likelyDrawSection}
 </section>
+${renderUnclassified(report)}
 <section id="matches"><h2>逐场明细</h2>
 ${matchSections || '<p>无已开售场次</p>'}
 </section>
@@ -600,6 +751,8 @@ ${renderPending(report)}
 <section id="limits"><h2>口径限制</h2>
 <ul>
 <li>只有官方已开售场次才有赔率；未开售场次无赔率，本看板不推断、不补造。</li>
+<li>「五类分组」与「可能平局」只统计 SPF、RQSPF 均已开售且可分类的场次；官方未开售单一市场的场次列入「数据不足（未分类）」，不参与分组、可能平局与任何推断。</li>
+${report.unclassified.length ? `<li>本日数据不足（未分类）场次：${report.unclassified.map((item) => escapeHtml(item.no)).join('、')}；官方未开售的市场没有赔率，不推断、不补造。</li>` : ''}
 <li>已定稿口径覆盖整数一球盘与半盘；整数 |h|≥2 的口径未定义，校验阶段直接拒绝。</li>
 <li>去水概率是赔率隐含概率，不含其它信息，不构成赛果预测。</li>
 <li>support 人气数据不是赔率概率，只原样展示，不参与任何计算、排序或分组。</li>
@@ -722,10 +875,17 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
     fail(`value.lastUpdateTime 无法转为带时区 ISO 时间（${value.lastUpdateTime}）`);
   }
 
-  const captured = capturedAt ?? now ?? currentTimestamp();
-  if (!isIsoWithTimezone(captured)) fail(`capturedAt 必须是带时区的 ISO 时间（${captured}）`);
+  const capturedInput = capturedAt ?? now;
+  let captured;
+  if (capturedInput === undefined) {
+    captured = currentTimestamp();
+  } else {
+    if (!isIsoWithTimezone(capturedInput)) fail(`capturedAt 必须是带时区的 ISO 时间（${capturedInput}）`);
+    captured = formatPlus08(capturedInput);
+  }
 
   const matches = [];
+  const unclassified = [];
   let skipped = 0;
   let date;
 
@@ -754,36 +914,57 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
       if (!isNonEmptyString(sub.matchTime) || !/^\d{2}:\d{2}:\d{2}$/.test(sub.matchTime)) {
         fail(`${where} 缺少合法的 matchTime`);
       }
-      if (!isPlainObject(sub.hhad)) fail(`${where} 缺少 hhad 赔率对象`);
-      const goalLine = sub.hhad.goalLine;
-      const handicap = typeof goalLine === 'string' && goalLine.trim() !== '' ? Number(goalLine) : Number.NaN;
-      if (!Number.isFinite(handicap)) fail(`${where} 字段 hhad.goalLine 非法（${JSON.stringify(goalLine)}）`);
 
-      const odds3 = (object, field) => {
-        if (!isPlainObject(object)) fail(`${where} 缺少 ${field} 赔率对象`);
-        return ['h', 'd', 'a'].map((key) => {
+      // 市场三种状态：三项齐全 → 数组；三项都不可用 → null；
+      // 只有 1–2 项可用或市场键缺失 → E_LIVE_FETCH（不猜、不补造）。
+      const readMarket = (object, field) => {
+        if (object === undefined || !isPlainObject(object)) fail(`${where} 缺少 ${field} 赔率对象`);
+        const values = ['h', 'd', 'a'].map((key) => {
           const raw = object[key];
-          const number = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
-          if (typeof number !== 'number' || !Number.isFinite(number) || number <= 1) {
-            fail(`${where} 字段 ${field}.${key} 赔率非法（${JSON.stringify(raw)}）`);
-          }
-          return number;
+          if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return null;
+          const number = typeof raw === 'string' ? Number(raw) : raw;
+          return typeof number === 'number' && Number.isFinite(number) && number > 1 ? number : null;
         });
+        const available = values.filter((value) => value !== null).length;
+        if (available === 3) return values;
+        if (available === 0) return null;
+        fail(`${where} 字段 ${field} 赔率不完整（只有 ${available} 项可用，需三项齐全或全部未开售）`);
       };
+
+      const spf = readMarket(sub.had, 'had');
+      const rqspf = readMarket(sub.hhad, 'hhad');
+      if (spf === null && rqspf === null) fail(`${where} had 与 hhad 两个市场均不可用，无法分类`);
+
+      let handicap = null;
+      if (rqspf !== null) {
+        const goalLine = sub.hhad.goalLine;
+        handicap = typeof goalLine === 'string' && goalLine.trim() !== '' ? Number(goalLine) : Number.NaN;
+        if (!Number.isFinite(handicap)) fail(`${where} 字段 hhad.goalLine 非法（${JSON.stringify(goalLine)}）`);
+      }
 
       const kickoff = `${sub.matchDate}T${sub.matchTime}+08:00`;
       if (!isIsoWithTimezone(kickoff)) fail(`${where} matchDate/matchTime 拼不出合法的带时区开赛时间`);
 
-      matches.push({
+      const base = {
         no: sub.matchNumStr,
         league: sub.leagueAbbName,
         kickoff,
         home: sub.homeTeamAbbName,
         away: sub.awayTeamAbbName,
-        handicap,
-        spf: odds3(sub.had, 'had'),
-        rqspf: odds3(sub.hhad, 'hhad'),
-      });
+      };
+
+      if (spf !== null && rqspf !== null) {
+        matches.push({ ...base, handicap, spf, rqspf });
+      } else {
+        const missingMarket = spf === null ? 'SPF（had）' : 'RQSPF（hhad）';
+        unclassified.push({
+          ...base,
+          handicap,
+          spf,
+          rqspf,
+          note: `官方未开售 ${missingMarket}，本场不参与五类分组与可能平局推断。`,
+        });
+      }
     });
   });
 
@@ -793,21 +974,40 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
   }
   if (date === undefined) fail('无法从响应确定比赛日期（businessDate）');
 
-  const totalCount = Number.isFinite(Number(value.totalCount)) ? Number(value.totalCount) : matches.length;
-  if (matches.length === 0) fail(`响应中没有任何可用的已开售场次（totalCount=${totalCount}）`);
+  const hasTotalCount =
+    value.totalCount !== undefined && value.totalCount !== null && Number.isFinite(Number(value.totalCount));
+  const totalCount = hasTotalCount ? Number(value.totalCount) : undefined;
 
-  let note = `本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=${totalCount}，未提供未开售场次，本看板不推断`;
+  if (matches.length + unclassified.length === 0) {
+    fail(`响应中没有任何可用的已开售场次（totalCount=${totalCount ?? '未知'}）`);
+  }
+  if (totalCount !== undefined && matches.length + unclassified.length + skipped !== totalCount) {
+    const sum = matches.length + unclassified.length + skipped;
+    fail(
+      `totalCount 不变式不成立：matches(${matches.length}) + unclassified(${unclassified.length}) + skipped(${skipped}) = ${sum}，与 totalCount=${totalCount} 不一致`,
+    );
+  }
+
+  const totalLabel = totalCount ?? matches.length + unclassified.length;
+  let note = `本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=${totalLabel}，未提供未开售场次，本看板不推断`;
   if (skipped > 0) note += `；另有 ${skipped} 场非开售/隐藏场次已跳过，未补造数据`;
+  if (unclassified.length > 0) {
+    note += `；另有 ${unclassified.length} 场因官方未开售单一市场无法分类，仅列入「数据不足」，不推断`;
+  }
 
-  return {
+  const fixture = {
     date,
     source,
     oddsUpdatedAt,
     capturedAt: captured,
     note,
     matches,
+    unclassified,
+    skipped,
     pending: [],
   };
+  if (totalCount !== undefined) fixture.totalCount = totalCount;
+  return fixture;
 }
 
 /**
@@ -820,7 +1020,7 @@ async function loadLiveFixture() {
   try {
     response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
-      headers: { 'user-agent': 'jczq-board/1.0' },
+      headers: LIVE_HEADERS,
     });
   } catch (error) {
     throw new BoardError('E_LIVE_FETCH', `实时数据抓取失败（${url}）：${error.message}`);
@@ -843,7 +1043,10 @@ async function loadLiveFixture() {
     throw new BoardError('E_LIVE_FETCH', `实时数据解析失败（${url}）：响应不是 JSON`);
   }
 
-  return mapLiveResponse(apiJson, { capturedAt: currentTimestamp(), source: url });
+  return {
+    fixture: mapLiveResponse(apiJson, { capturedAt: currentTimestamp(), source: url }),
+    rawText: text,
+  };
 }
 
 async function main(argv) {
@@ -856,8 +1059,11 @@ async function main(argv) {
 
   let fixture;
   let outputDate;
+  let liveRawText;
   if (args.mode === 'live') {
-    fixture = await loadLiveFixture();
+    const loaded = await loadLiveFixture();
+    fixture = loaded.fixture;
+    liveRawText = loaded.rawText;
     validateFixture(fixture);
     outputDate = fixture.date;
   } else if (args.mode === 'date') {
@@ -872,6 +1078,19 @@ async function main(argv) {
 
   const report = analyzeFixture(fixture);
   const html = renderHtml(report);
+
+  // 顺序：解析 → 映射 → validate → 渲染 → 写快照 → 写报告。
+  // 快照保留官方响应原文；写快照失败则不写报告。
+  if (liveRawText !== undefined) {
+    const snapshotPath = path.join(REPO_ROOT, 'fixtures', `${outputDate}.live-raw.json`);
+    try {
+      mkdirSync(path.dirname(snapshotPath), { recursive: true });
+      writeFileSync(snapshotPath, liveRawText, 'utf8');
+    } catch (error) {
+      throw new BoardError('E_INTERNAL', `写快照失败：${snapshotPath}（${error.message}）`);
+    }
+  }
+
   const outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, html, 'utf8');

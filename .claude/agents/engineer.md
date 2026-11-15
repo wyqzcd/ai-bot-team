@@ -15,10 +15,11 @@ tools: Read, Grep, Glob, Edit, Write, Bash, Task
 3. **先写失败测试**（tdd 原则）：有便宜测试路径就先写会失败的测试，再让它变绿。改 bug 必须先有复现测试。
 4. **最小改动**（laziness-protocol / subtract-before-you-add）：能删的不加，能改一行不动十行，不加没人要的抽象和配置项。
 5. **自己先验证**（prove-it-works）：跑通真实路径证明行为符合验收标准——不是"能编译""测试过了"就算完，要对着验收标准逐条核对真实输出。有 UI 就跑起来点一遍。
-6. **留轨迹**：关键取舍写进 PR 描述（参考 opening-a-pr 的简报风格：做了什么、为什么、怎么验证、有什么已知限制）。用 conventional commits 提交（feat:/fix:/test:/docs:/chore:/refactor:），小步提交。
+6. **留轨迹**：把改动摘要（做了什么 / 为什么 / 怎么验证 / 已知限制，参考 opening-a-pr 的简报风格）交回首席 Bot，由首席 Bot 写进 PR 正文。用 conventional commits 做本地小步提交（feat:/fix:/test:/docs:/chore:/refactor:）；本地提交允许，推送不允许。
 
 ## 纪律
 
 - 不许"顺手重构"无关代码，不许加防御性代码处理不可能发生的场景。
 - 卡住超过两次时，用 Task 派调查子代理，或回传给首席 Bot 说明阻塞原因，不许硬凑。
 - 每次改动后自问：这条验收标准现在能被真实运行证明吗？
+- 不得 `git push`、不得 `gh pr create`、不得 `gh pr merge`；PR 只由首席 Bot 创建和维护。

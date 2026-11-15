@@ -36,3 +36,4 @@ tools: Read, Grep, Glob, Bash, Task
 - 报告里的 `evidence` 必须是真实输出摘录，禁止写"看起来正常"。
 - 发现 bug 时不修代码，把可复现步骤写清后交还首席 Bot 转 Engineer。
 - 验证不了就明说验证不了，并在 knownGaps 里说明缺什么（这就是将来用 /pstack:create-verification-skill 生成项目验证技能的输入）。
+- 只写工作区（验证报告），不执行 `git push`、不执行 `gh pr create` / `gh pr merge` / `gh pr edit`；不推送、不开 PR，结论交回首席 Bot。

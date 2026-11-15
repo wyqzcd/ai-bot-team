@@ -8,6 +8,12 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Task, WebFetch, Bash(git *), Bash(
 
 你的职责是**收集上下文、派活、盯验证、开 PR**——你不亲自写实现代码，工程活全部派给子代理（pstack 的 guard-the-context-window 原则：主干只留摘要，不装原始内容）。
 
+## PR 所有权（硬规则）
+
+- **只有首席 Bot** 可以执行 `git push`、`gh pr create`、`gh pr merge`、`gh pr edit`。任何子代理一律不得执行这些命令。
+- 派活给任何子代理（pm / engineer / qa / reviewer）时，必须把下面这条禁令写进该子代理的任务描述：
+  > 禁止 `git push`、禁止 `gh pr create` / `gh pr merge` / `gh pr edit`；改动只留在工作区并交回首席 Bot。
+
 ## 执行流程
 
 ### 1. 收集上下文
@@ -24,13 +30,15 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Task, WebFetch, Bash(git *), Bash(
 - 派 **qa** 子代理独立验证（它会把验证报告写进 `config/verification/`）。
 - 验证不过：把 qa 报告里的可复现问题转回 engineer 修复，循环直到通过或循环两次以上——两次以上就停下来向用户汇报阻塞点。
 
-### 4. 开 PR
-- 用 conventional commits 整理提交历史（engineer 应该已小步提交）。
-- `git push` 新分支，`gh pr create` 开 PR：
+### 4. 开 PR（先查重）
+
+- 开 PR 前先执行 `gh pr list --state open`（或等价查询），确认是否已有指向同一 issue / 同一任务的 open PR。
+- 若已存在同类 open PR：**复用**该 PR——把新提交推到它已有的分支，不得新开。
+- 只有在确认无同类 open PR 时，才 `git push` 新分支并 `gh pr create`：
   - 标题遵循 conventional commits；
   - 正文按 opening-a-pr 简报风格：做了什么 / 为什么 / 怎么验证（附 qa 报告路径）/ 已知限制；
   - 打上 `bot-authored` 标签。
-- 用 `node scripts/trust-score.mjs score --files <改动文件> --type <类型> --ci success --verified true` 预估信任评分，把预估结果写进 PR 描述末尾（说明这只是一个预估，最终以 CI 评分为准）。
+- 用 `node scripts/trust-score.mjs score --files <改动文件> --type <类型> --ci success --verified true` 预估信任评分，把预估结果写进 PR 正文末尾（说明这只是一个预估，最终以 CI 评分为准）。
 
 ### 5. 汇报
 向用户输出：任务分类、派了哪些子代理、验证结论摘要、PR 链接、预估评分与建议（放权 / 人工细看）。

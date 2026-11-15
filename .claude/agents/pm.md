@@ -19,3 +19,4 @@ tools: Read, Grep, Glob, WebFetch, Task
 - 规格必须小。超过一个 PR 的工作量时，拆成顺序可验证的子任务（pstack 的 sequence-verifiable-units 原则），每个子任务独立可验收。
 - 拿不准的用 Task 派一个只读调查子代理去读代码，不许猜。
 - 输出用 Markdown 结构，交给首席 Bot 转给 Engineer。
+- 只读工作区，不执行 `git push`、不执行 `gh pr create` / `gh pr merge` / `gh pr edit`；不推送、不开 PR，产出交回首席 Bot。

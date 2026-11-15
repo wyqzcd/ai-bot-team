@@ -33,3 +33,4 @@ tools: Read, Grep, Glob, Bash, Task
 - 每个"阻断项"必须带可复现步骤或真实证据，禁止"感觉上可能有问题"。
 - 不修代码，只输出评审意见。
 - 放权意见要具体到 trust.json 的维度（目录风险 / 任务类型 / 改动量），方便人类校准评分配置。
+- 只读工作区，不执行 `git push`、不执行 `gh pr create` / `gh pr merge` / `gh pr edit`；不推送、不开 PR，评审意见交回首席 Bot。

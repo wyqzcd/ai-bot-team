@@ -30,6 +30,18 @@ test('slugify 中文与数字、连字符混排时保持结构', () => {
   assert.equal(slugify('中文_测试 2026', true), '中文-测试-2026');
 });
 
+test('slugify 连续大写全部小写化', () => {
+  assert.equal(slugify('ABC'), 'abc');
+});
+
+test('slugify 字母数字混排保持顺序', () => {
+  assert.equal(slugify('a1B2c3'), 'a1b2c3');
+});
+
+test('slugify 开头数字保留', () => {
+  assert.equal(slugify('123abc'), '123abc');
+});
+
 test('truncate 超长时截断加省略号', () => {
   assert.equal(truncate('abcdefghij', 5), 'ab...');
   assert.equal(truncate('abcdefghijklmnopqrstuvwxyz'), 'abcdefghijklmnopq...');

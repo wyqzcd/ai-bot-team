@@ -45,14 +45,15 @@ const FOUR_GROUPS = [
 ];
 const LOSE_COVER_EMPTY_NOTE =
   '整数一球盘下，输 1 球为走盘（让球平），受让方输球不可能赢盘；真正的「输球赢盘」需要半盘。本批无半盘，该组恒为空，未硬凑场次、未虚构半盘。';
-const DEFAULT_LIVE_URL = 'https://www.sporttery.cn/jc/jsq/zqspf/';
+const DEFAULT_LIVE_URL =
+  'https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&channel=c';
 
 const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
 
 用法（三种模式互斥，必须且只能选一种）：
   node scripts/jczq-board.mjs --date <YYYY-MM-DD>   读取 fixtures/<date>.json
   node scripts/jczq-board.mjs --fixture <path>      读取指定 JSON（相对仓库根，也接受绝对路径）
-  node scripts/jczq-board.mjs --live                从官方页面抓取实时数据
+  node scripts/jczq-board.mjs --live                从官方 JSON 接口抓取实时数据
   node scripts/jczq-board.mjs --help                显示本帮助
 
 输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
@@ -698,28 +699,151 @@ function readFixtureFile(absolutePath) {
 }
 
 /**
- * --live 抓取官方页面。注意：该能力未在当前环境验证，仅做尽力而为的 JSON 解析；
- * 真实官方页面若为服务端渲染 HTML，需要另行适配解析器。
- * 网络调用只存在于本函数内，其余代码路径绝不联网。
+ * 把官方 JSON 接口响应映射为 fixture schema。纯函数，便于离线单测。
+ * 结构不符或赔率缺失一律抛 BoardError(E_LIVE_FETCH)，不静默降级到 fixture。
+ */
+export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIVE_URL } = {}) {
+  const fail = (detail) => {
+    throw new BoardError('E_LIVE_FETCH', `实时数据解析失败（${source}）：${detail}`);
+  };
+
+  if (!isPlainObject(apiJson)) fail('响应不是 JSON 对象');
+  if (apiJson.success !== true) {
+    const detail = apiJson.errorMessage ? `，errorMessage=${apiJson.errorMessage}` : '';
+    fail(`接口 success 不为 true（success=${JSON.stringify(apiJson.success)}${detail}）`);
+  }
+  const value = apiJson.value;
+  if (!isPlainObject(value)) fail('响应缺少 value 对象');
+  if (!Array.isArray(value.matchInfoList)) fail('响应缺少 value.matchInfoList 数组');
+  if (!isNonEmptyString(value.lastUpdateTime)) fail('响应缺少 value.lastUpdateTime');
+
+  const oddsUpdatedAt = `${value.lastUpdateTime.trim().replace(' ', 'T')}+08:00`;
+  if (!isIsoWithTimezone(oddsUpdatedAt)) {
+    fail(`value.lastUpdateTime 无法转为带时区 ISO 时间（${value.lastUpdateTime}）`);
+  }
+
+  const captured = capturedAt ?? now ?? currentTimestamp();
+  if (!isIsoWithTimezone(captured)) fail(`capturedAt 必须是带时区的 ISO 时间（${captured}）`);
+
+  const matches = [];
+  let skipped = 0;
+  let date;
+
+  value.matchInfoList.forEach((group, groupIndex) => {
+    const groupWhere = `matchInfoList[${groupIndex}]`;
+    if (!isPlainObject(group)) fail(`${groupWhere} 必须是对象`);
+    if (!Array.isArray(group.subMatchList)) fail(`${groupWhere} 缺少 subMatchList 数组`);
+    if (date === undefined && isIsoDate(group.businessDate)) date = group.businessDate;
+
+    group.subMatchList.forEach((sub, subIndex) => {
+      const where = isPlainObject(sub) && isNonEmptyString(sub.matchNumStr)
+        ? `场次 ${sub.matchNumStr}`
+        : `${groupWhere}.subMatchList[${subIndex}]`;
+      if (!isPlainObject(sub)) fail(`${where} 必须是对象`);
+
+      // 非开售/隐藏场次不计入已开售，也不补造赔率。
+      if ((sub.matchStatus !== undefined && sub.matchStatus !== 'Selling') || sub.isHide === 1 || sub.isHide === true) {
+        skipped += 1;
+        return;
+      }
+
+      for (const field of ['matchNumStr', 'leagueAbbName', 'homeTeamAbbName', 'awayTeamAbbName']) {
+        if (!isNonEmptyString(sub[field])) fail(`${where} 缺少 ${field}`);
+      }
+      if (!isIsoDate(sub.matchDate)) fail(`${where} 缺少合法的 matchDate`);
+      if (!isNonEmptyString(sub.matchTime) || !/^\d{2}:\d{2}:\d{2}$/.test(sub.matchTime)) {
+        fail(`${where} 缺少合法的 matchTime`);
+      }
+      if (!isPlainObject(sub.hhad)) fail(`${where} 缺少 hhad 赔率对象`);
+      const goalLine = sub.hhad.goalLine;
+      const handicap = typeof goalLine === 'string' && goalLine.trim() !== '' ? Number(goalLine) : Number.NaN;
+      if (!Number.isFinite(handicap)) fail(`${where} 字段 hhad.goalLine 非法（${JSON.stringify(goalLine)}）`);
+
+      const odds3 = (object, field) => {
+        if (!isPlainObject(object)) fail(`${where} 缺少 ${field} 赔率对象`);
+        return ['h', 'd', 'a'].map((key) => {
+          const raw = object[key];
+          const number = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+          if (typeof number !== 'number' || !Number.isFinite(number) || number <= 1) {
+            fail(`${where} 字段 ${field}.${key} 赔率非法（${JSON.stringify(raw)}）`);
+          }
+          return number;
+        });
+      };
+
+      const kickoff = `${sub.matchDate}T${sub.matchTime}+08:00`;
+      if (!isIsoWithTimezone(kickoff)) fail(`${where} matchDate/matchTime 拼不出合法的带时区开赛时间`);
+
+      matches.push({
+        no: sub.matchNumStr,
+        league: sub.leagueAbbName,
+        kickoff,
+        home: sub.homeTeamAbbName,
+        away: sub.awayTeamAbbName,
+        handicap,
+        spf: odds3(sub.had, 'had'),
+        rqspf: odds3(sub.hhad, 'hhad'),
+      });
+    });
+  });
+
+  if (date === undefined) {
+    const fallback = value.lastUpdateTime.slice(0, 10);
+    if (isIsoDate(fallback)) date = fallback;
+  }
+  if (date === undefined) fail('无法从响应确定比赛日期（businessDate）');
+
+  const totalCount = Number.isFinite(Number(value.totalCount)) ? Number(value.totalCount) : matches.length;
+  if (matches.length === 0) fail(`响应中没有任何可用的已开售场次（totalCount=${totalCount}）`);
+
+  let note = `本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=${totalCount}，未提供未开售场次，本看板不推断`;
+  if (skipped > 0) note += `；另有 ${skipped} 场非开售/隐藏场次已跳过，未补造数据`;
+
+  return {
+    date,
+    source,
+    oddsUpdatedAt,
+    capturedAt: captured,
+    note,
+    matches,
+    pending: [],
+  };
+}
+
+/**
+ * --live 抓取官方 JSON 接口并映射为 fixture。网络调用只存在于本函数内，
+ * 其余代码路径绝不联网；失败一律抛 BoardError(E_LIVE_FETCH)，不降级到 fixture。
  */
 async function loadLiveFixture() {
   const url = process.env.JCZQ_LIVE_URL || DEFAULT_LIVE_URL;
-  let text;
+  let response;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
       headers: { 'user-agent': 'jczq-board/1.0' },
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    text = await response.text();
   } catch (error) {
     throw new BoardError('E_LIVE_FETCH', `实时数据抓取失败（${url}）：${error.message}`);
   }
+  if (!response.ok) {
+    throw new BoardError('E_LIVE_FETCH', `实时数据抓取失败（${url}）：HTTP ${response.status}`);
+  }
+
+  let text;
   try {
-    return JSON.parse(text);
+    text = await response.text();
+  } catch (error) {
+    throw new BoardError('E_LIVE_FETCH', `实时数据读取失败（${url}）：${error.message}`);
+  }
+
+  let apiJson;
+  try {
+    apiJson = JSON.parse(text);
   } catch {
     throw new BoardError('E_LIVE_FETCH', `实时数据解析失败（${url}）：响应不是 JSON`);
   }
+
+  return mapLiveResponse(apiJson, { capturedAt: currentTimestamp(), source: url });
 }
 
 async function main(argv) {

@@ -30,12 +30,28 @@ test('slugify 中文与数字、连字符混排时保持结构', () => {
   assert.equal(slugify('中文_测试 2026', true), '中文-测试-2026');
 });
 
+test('slugify 在驼峰边界插入连字符', () => {
+  assert.equal(slugify('fooBarBaz'), 'foo-bar-baz');
+  assert.equal(slugify('FooBar'), 'foo-bar');
+  assert.equal(slugify('foo2Bar'), 'foo2-bar');
+  assert.equal(slugify('2Foo'), '2-foo');
+  assert.equal(slugify('fooBAR'), 'foo-bar');
+  assert.equal(slugify('XMLHttpRequest'), 'xmlhttp-request');
+  assert.equal(slugify('FOO'), 'foo');
+  assert.equal(slugify('XML'), 'xml');
+  assert.equal(slugify(''), '');
+  assert.equal(slugify('你好World', true), '你好world');
+  assert.equal(slugify('你好World', false), 'world');
+  assert.equal(slugify('foo-Bar'), 'foo-bar');
+  assert.equal(slugify('foo_barBaz'), 'foo-bar-baz');
+});
+
 test('slugify 连续大写全部小写化', () => {
   assert.equal(slugify('ABC'), 'abc');
 });
 
-test('slugify 字母数字混排保持顺序', () => {
-  assert.equal(slugify('a1B2c3'), 'a1b2c3');
+test('slugify 数字后接大写视为驼峰边界', () => {
+  assert.equal(slugify('a1B2c3'), 'a1-b2c3');
 });
 
 test('slugify 开头数字保留', () => {

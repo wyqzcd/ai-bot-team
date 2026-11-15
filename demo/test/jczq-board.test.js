@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ import {
   classifyMatch,
   findLikelyDraw,
   analyzeFixture,
+  buildDryRunSummary,
   renderHtml,
   formatPlus08,
   parseArgs,
@@ -25,6 +27,8 @@ import {
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/jczq-board.mjs', import.meta.url));
 const FIXTURE_PATH = fileURLToPath(new URL('../../fixtures/2026-11-15.json', import.meta.url));
+const REPORTS_DIR = path.join(REPO_ROOT, 'reports');
+const FIXTURES_DIR = path.join(REPO_ROOT, 'fixtures');
 const FIXTURE = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'));
 const LIVE_RAW_PATH = fileURLToPath(new URL('../../fixtures/2026-11-15.live-raw.json', import.meta.url));
 const LIVE_RAW = JSON.parse(readFileSync(LIVE_RAW_PATH, 'utf8'));
@@ -48,6 +52,38 @@ function runCli(args, env = {}) {
 
 function approx(actual, expected, tolerance = 1e-6) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} 与 ${expected} 差值超过 ${tolerance}`);
+}
+
+/** 目录内每个文件的 md5 与 mtime，用于证明零写盘。 */
+function dirSnapshot(dir) {
+  const snapshot = {};
+  for (const name of readdirSync(dir).sort()) {
+    const file = path.join(dir, name);
+    const stat = statSync(file);
+    if (!stat.isFile()) continue;
+    snapshot[name] = {
+      md5: createHash('md5').update(readFileSync(file)).digest('hex'),
+      mtimeMs: stat.mtimeMs,
+    };
+  }
+  return snapshot;
+}
+
+function dataUrlFor(payload) {
+  const text = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  return `data:application/json;base64,${Buffer.from(text).toString('base64')}`;
+}
+
+/** 指定 businessDate 的合成实时响应，避免触碰被跟踪的 2026-11-15 快照。 */
+function liveRawDate(date, subs, { totalCount = subs.length, lastUpdateTime = `${date} 12:00:00` } = {}) {
+  return {
+    success: true,
+    value: {
+      lastUpdateTime,
+      totalCount,
+      matchInfoList: [{ businessDate: date, subMatchList: subs }],
+    },
+  };
 }
 
 function syntheticMatch(overrides = {}) {
@@ -824,4 +860,229 @@ test('--live 响应不是 JSON 退出码 6', () => {
   assert.equal(result.status, 6);
   assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
   assert.match(result.stderr, /不是 JSON/);
+});
+
+test('parseArgs 支持 --dry-run 与 --out，未传时不新增键且互斥', () => {
+  assert.deepEqual(parseArgs(['--live', '--dry-run']), { mode: 'live', dryRun: true });
+  assert.deepEqual(parseArgs(['--fixture', 'f', '--out', '/tmp/b.html']), {
+    mode: 'fixture',
+    fixture: 'f',
+    out: '/tmp/b.html',
+  });
+  assert.deepEqual(parseArgs(['--date', '2026-11-15', '--dry-run']), {
+    mode: 'date',
+    date: '2026-11-15',
+    dryRun: true,
+  });
+
+  // 未传新选项时返回形状与旧版逐键一致，不得出现 dryRun:false / out:undefined。
+  assert.deepEqual(parseArgs(['--live']), { mode: 'live' });
+  assert.ok(!('dryRun' in parseArgs(['--live'])));
+  assert.ok(!('out' in parseArgs(['--fixture', 'f'])));
+
+  const bad = [
+    ['--help', '--out', 'x'],
+    ['--help', '--dry-run'],
+    ['--dry-run', '--out', 'x'],
+    ['--live', '--dry-run', '--out', 'x'],
+    ['--live', '--dry-run', '--dry-run'],
+    ['--live', '--out', 'x', '--out', 'y'],
+    ['--live', '--out'],
+    ['--live', '--out', ''],
+    ['--live', '--out', '--dry-run'],
+    ['--dry-run'],
+  ];
+  for (const argv of bad) {
+    assert.throws(
+      () => parseArgs(argv),
+      (err) => err instanceof BoardError && err.code === 'E_USAGE',
+      `应拒绝 ${JSON.stringify(argv)}`,
+    );
+  }
+});
+
+test('buildDryRunSummary 回填 totalCount 且满足不变式', () => {
+  const report = analyzeFixture(cloneFixture());
+  assert.equal(report.totalCount, undefined);
+  const summary = buildDryRunSummary(report);
+
+  assert.deepEqual(Object.keys(summary), [
+    'oddsUpdatedAt',
+    'totalCount',
+    'matches',
+    'unclassified',
+    'skipped',
+    'groups',
+    'likelyDraw',
+  ]);
+  assert.deepEqual(Object.keys(summary.groups), [
+    'win_cover',
+    'win_no_cover',
+    'lose_cover',
+    'lose_no_cover',
+    'no_handicap',
+    'ambiguous',
+  ]);
+  assert.equal(summary.oddsUpdatedAt, FIXTURE.oddsUpdatedAt);
+  assert.equal(summary.totalCount, 5);
+  assert.equal(summary.matches, 5);
+  assert.equal(summary.unclassified, 0);
+  assert.equal(summary.skipped, 0);
+  assert.equal(summary.groups.win_cover, 2);
+  assert.equal(summary.groups.win_no_cover, 3);
+  const grouped = Object.values(summary.groups).reduce((a, b) => a + b, 0);
+  assert.equal(grouped + summary.unclassified + summary.skipped, summary.totalCount);
+  assert.deepEqual(summary.likelyDraw.matches, ['周日001']);
+  assert.ok(Math.abs(summary.likelyDraw.probability - 0.283405) < 1e-4);
+  assert.ok(!('date' in summary));
+  assert.ok(!('pending' in summary));
+});
+
+test('CLI --live --dry-run 输出单行摘要且完全不写盘', () => {
+  const reportsBefore = dirSnapshot(REPORTS_DIR);
+  const fixturesBefore = dirSnapshot(FIXTURES_DIR);
+
+  const result = runCli(['--live', '--dry-run'], {
+    JCZQ_LIVE_URL: dataUrlFor(LIVE_RAW),
+    JCZQ_NOW: NOW,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.ok(result.stdout.endsWith('\n'));
+  assert.equal(result.stdout.trimEnd().split('\n').length, 1);
+
+  const summary = JSON.parse(result.stdout);
+  assert.deepEqual(Object.keys(summary), [
+    'oddsUpdatedAt',
+    'totalCount',
+    'matches',
+    'unclassified',
+    'skipped',
+    'groups',
+    'likelyDraw',
+  ]);
+  assert.deepEqual(Object.keys(summary.groups), [
+    'win_cover',
+    'win_no_cover',
+    'lose_cover',
+    'lose_no_cover',
+    'no_handicap',
+    'ambiguous',
+  ]);
+  assert.equal(summary.oddsUpdatedAt, '2026-11-15T18:26:13+08:00');
+  assert.equal(summary.totalCount, 7);
+  assert.equal(summary.matches, 6);
+  assert.equal(summary.unclassified, 1);
+  assert.equal(summary.skipped, 0);
+  assert.equal(summary.groups.win_no_cover, 5);
+  assert.equal(summary.groups.win_cover, 1);
+  const grouped = Object.values(summary.groups).reduce((a, b) => a + b, 0);
+  assert.equal(grouped + summary.unclassified + summary.skipped, summary.totalCount);
+  assert.ok(Math.abs(summary.likelyDraw.probability - 0.2908) < 1e-4);
+  assert.deepEqual(summary.likelyDraw.matches, ['周日006']);
+
+  assert.deepEqual(dirSnapshot(REPORTS_DIR), reportsBefore);
+  assert.deepEqual(dirSnapshot(FIXTURES_DIR), fixturesBefore);
+});
+
+test('CLI --live --out 写入指定路径，快照仍落 fixtures/<date>.live-raw.json', (t) => {
+  const date = '2099-01-01';
+  const snapshotPath = path.join(FIXTURES_DIR, `${date}.live-raw.json`);
+  assert.ok(!existsSync(snapshotPath), '测试前置：临时快照不应存在');
+  t.after(() => rmSync(snapshotPath, { force: true }));
+
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-board-out-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const outPath = path.join(dir, 'board.html');
+
+  const payload = liveRawDate(date, [liveSub({ matchDate: date })], {
+    lastUpdateTime: `${date} 12:00:00`,
+  });
+  const reportsBefore = dirSnapshot(REPORTS_DIR);
+
+  const result = runCli(['--live', '--out', outPath], {
+    JCZQ_LIVE_URL: dataUrlFor(payload),
+    JCZQ_NOW: NOW,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, `已生成报告：${outPath}\n`);
+  assert.ok(existsSync(outPath), '应生成指定报告');
+  assert.match(readFileSync(outPath, 'utf8'), /竞彩足球盘口看板 · 2099-01-01/);
+
+  assert.ok(existsSync(snapshotPath), '快照仍应写到 fixtures/<date>.live-raw.json');
+  assert.deepEqual(JSON.parse(readFileSync(snapshotPath, 'utf8')), payload);
+
+  assert.deepEqual(dirSnapshot(REPORTS_DIR), reportsBefore);
+});
+
+test('CLI --out 父目录不存在或目标是目录时退出码 2，且不 mkdir', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'jczq-board-out-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const missingParent = path.join(dir, 'nope');
+  const result = runCli(['--live', '--out', path.join(missingParent, 'board.html')], {
+    JCZQ_LIVE_URL: 'http://127.0.0.1:1/',
+  });
+  // 预检先于 load：网络不可达也应返回 2 而非 6。
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /\[E_USAGE\]/);
+  assert.equal(result.stdout, '');
+  assert.ok(!existsSync(missingParent), '不得静默创建父目录');
+
+  const dirResult = runCli(['--live', '--out', dir], { JCZQ_LIVE_URL: 'http://127.0.0.1:1/' });
+  assert.equal(dirResult.status, 2);
+  assert.match(dirResult.stderr, /\[E_USAGE\]/);
+  assert.equal(dirResult.stdout, '');
+});
+
+test('--dry-run 下抓取/结构/schema 失败退出码正确且不写盘', (t) => {
+  const reportsBefore = dirSnapshot(REPORTS_DIR);
+  const fixturesBefore = dirSnapshot(FIXTURES_DIR);
+
+  const network = runCli(['--live', '--dry-run'], { JCZQ_LIVE_URL: 'http://127.0.0.1:1/' });
+  assert.equal(network.status, 6);
+  assert.match(network.stderr, /\[E_LIVE_FETCH\]/);
+  assert.equal(network.stdout, '');
+
+  const notJson = runCli(['--live', '--dry-run'], { JCZQ_LIVE_URL: 'data:text/plain,not-json' });
+  assert.equal(notJson.status, 6);
+  assert.match(notJson.stderr, /\[E_LIVE_FETCH\]/);
+  assert.equal(notJson.stdout, '');
+
+  const successFalse = runCli(['--live', '--dry-run'], {
+    JCZQ_LIVE_URL: dataUrlFor({ success: false, value: {} }),
+  });
+  assert.equal(successFalse.status, 6);
+  assert.match(successFalse.stderr, /\[E_LIVE_FETCH\]/);
+  assert.equal(successFalse.stdout, '');
+
+  const badSchema = cloneFixture();
+  badSchema.matches[0].spf = [2.32, 3.1];
+  const schema = runCli(['--fixture', tempFixture(t, badSchema), '--dry-run']);
+  assert.equal(schema.status, 5);
+  assert.match(schema.stderr, /\[E_FIXTURE_SCHEMA\]/);
+  assert.equal(schema.stdout, '');
+
+  assert.deepEqual(dirSnapshot(REPORTS_DIR), reportsBefore);
+  assert.deepEqual(dirSnapshot(FIXTURES_DIR), fixturesBefore);
+});
+
+test('CLI --fixture --dry-run 零写盘并回填 totalCount', (t) => {
+  const file = tempFixture(t, cloneFixture());
+  const reportsBefore = dirSnapshot(REPORTS_DIR);
+  const fixturesBefore = dirSnapshot(FIXTURES_DIR);
+
+  const result = runCli(['--fixture', file, '--dry-run']);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.totalCount, 5);
+  assert.equal(summary.matches, 5);
+  assert.deepEqual(summary.likelyDraw.matches, ['周日001']);
+  assert.deepEqual(dirSnapshot(REPORTS_DIR), reportsBefore);
+  assert.deepEqual(dirSnapshot(FIXTURES_DIR), fixturesBefore);
 });

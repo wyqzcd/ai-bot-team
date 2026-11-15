@@ -7,6 +7,7 @@
 export function slugify(input, keepChinese = false) {
   const strip = keepChinese ? /[^a-z0-9-\p{Script=Han}]/gu : /[^a-z0-9-]/g;
   return String(input)
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .toLowerCase()
     .trim()
     .replace(/[\s_]+/g, '-')

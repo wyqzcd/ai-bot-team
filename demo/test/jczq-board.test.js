@@ -18,11 +18,14 @@ import {
   renderHtml,
   parseArgs,
   validateFixture,
+  mapLiveResponse,
 } from '../../scripts/jczq-board.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/jczq-board.mjs', import.meta.url));
 const FIXTURE_PATH = fileURLToPath(new URL('../../fixtures/2026-11-15.json', import.meta.url));
 const FIXTURE = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'));
+const LIVE_RAW_PATH = fileURLToPath(new URL('../../fixtures/2026-11-15.live-raw.json', import.meta.url));
+const LIVE_RAW = JSON.parse(readFileSync(LIVE_RAW_PATH, 'utf8'));
 const NOW = '2026-11-15T09:30:00+08:00';
 
 const LOSE_COVER_EMPTY_NOTE =
@@ -32,11 +35,12 @@ function cloneFixture() {
   return JSON.parse(JSON.stringify(FIXTURE));
 }
 
-function runCli(args) {
+function runCli(args, env = {}) {
   return spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: os.tmpdir(),
     encoding: 'utf8',
     timeout: 15000,
+    env: { ...process.env, ...env },
   });
 }
 
@@ -470,4 +474,82 @@ test('renderHtml 转义所有动态文本', () => {
   assert.ok(html.includes('C&amp;D'));
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
   assert.ok(html.includes('https://example.com/?a=1&amp;b=2'));
+});
+
+test('mapLiveResponse 将官方 JSON 接口离线快照映射为 fixture schema', () => {
+  const fixture = mapLiveResponse(LIVE_RAW, { capturedAt: NOW });
+
+  assert.equal(fixture.date, '2026-11-15');
+  assert.equal(fixture.capturedAt, NOW);
+  assert.equal(fixture.oddsUpdatedAt, '2026-11-15T10:19:44+08:00');
+  assert.deepEqual(fixture.pending, []);
+  assert.equal(fixture.matches.length, 5);
+  assert.match(fixture.note, /--live/);
+  assert.match(fixture.note, /totalCount=5/);
+  assert.match(fixture.note, /未提供未开售场次/);
+
+  const [first, , third] = fixture.matches;
+  assert.equal(first.no, '周日001');
+  assert.equal(first.league, '日联赛杯');
+  assert.equal(first.kickoff, '2026-11-15T13:00:00+08:00');
+  assert.equal(first.home, '町田泽维');
+  assert.equal(first.away, '神户胜利');
+  assert.equal(first.handicap, -1);
+  assert.deepEqual(first.spf, [2.24, 3.05, 2.74]);
+  assert.deepEqual(first.rqspf, [5.32, 3.75, 1.46]);
+  assert.equal(first.support, undefined);
+
+  assert.equal(third.no, '周日003');
+  assert.equal(third.handicap, 1);
+  assert.deepEqual(third.spf, [2.45, 3.5, 2.25]);
+  assert.deepEqual(third.rqspf, [1.46, 4.15, 4.7]);
+
+  // 映射结果必须能通过正式校验并进入分析，且不补造 support。
+  assert.equal(validateFixture(fixture), true);
+  const report = analyzeFixture(fixture);
+  assert.equal(report.matches.length, 5);
+  assert.ok(report.matches.every((match) => match.support === undefined));
+});
+
+test('mapLiveResponse 结构异常一律抛 E_LIVE_FETCH', () => {
+  const cloneRaw = () => JSON.parse(JSON.stringify(LIVE_RAW));
+
+  const missingHhad = cloneRaw();
+  delete missingHhad.value.matchInfoList[0].subMatchList[0].hhad;
+  assert.throws(
+    () => mapLiveResponse(missingHhad, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('hhad'),
+  );
+
+  const successFalse = cloneRaw();
+  successFalse.success = false;
+  assert.throws(
+    () => mapLiveResponse(successFalse, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('success'),
+  );
+
+  const missingList = cloneRaw();
+  delete missingList.value.matchInfoList;
+  assert.throws(
+    () => mapLiveResponse(missingList, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('matchInfoList'),
+  );
+
+  assert.throws(
+    () => mapLiveResponse('not-json', { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH',
+  );
+});
+
+test('--live 网络不可达退出码 6，不依赖真实网络', () => {
+  const result = runCli(['--live'], { JCZQ_LIVE_URL: 'http://127.0.0.1:1/' });
+  assert.equal(result.status, 6);
+  assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
+});
+
+test('--live 响应不是 JSON 退出码 6', () => {
+  const result = runCli(['--live'], { JCZQ_LIVE_URL: 'data:text/plain,not-json' });
+  assert.equal(result.status, 6);
+  assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
+  assert.match(result.stderr, /不是 JSON/);
 });

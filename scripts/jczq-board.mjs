@@ -65,8 +65,12 @@ const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
   node scripts/jczq-board.mjs --live                从官方 JSON 接口抓取实时数据
   node scripts/jczq-board.mjs --help                显示本帮助
 
-输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
---live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）。
+可选：
+  --out <path>     报告改写到指定路径（相对 cwd 或绝对路径；父目录须已存在）
+  --dry-run        只抓取/校验/分析并打印一行 JSON 摘要，不写任何文件（与 --out 互斥）
+
+默认输出 reports/<fixture.date>.html（与 cwd 无关）。
+--live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）；--dry-run 不写该快照。
 环境变量：
   JCZQ_NOW       覆盖生成时间 generatedAt（带时区 ISO，便于复现）
   JCZQ_LIVE_URL  覆盖 --live 的抓取地址
@@ -788,8 +792,10 @@ export function parseArgs(argv) {
 
   let fixture;
   let date;
+  let out;
   let live = false;
   let help = false;
+  let dryRun = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -799,7 +805,10 @@ export function parseArgs(argv) {
     } else if (arg === '--live') {
       mark('live');
       live = true;
-    } else if (arg === '--fixture' || arg === '--date') {
+    } else if (arg === '--dry-run') {
+      mark('dry-run');
+      dryRun = true;
+    } else if (arg === '--fixture' || arg === '--date' || arg === '--out') {
       const key = arg.slice(2);
       mark(key);
       const value = argv[index + 1];
@@ -808,7 +817,8 @@ export function parseArgs(argv) {
       }
       index += 1;
       if (key === 'fixture') fixture = value;
-      else date = value;
+      else if (key === 'date') date = value;
+      else out = value;
     } else if (arg.startsWith('-')) {
       usageError(`未知参数：${arg}`);
     } else {
@@ -825,13 +835,24 @@ export function parseArgs(argv) {
 
   if (modes.length === 0) usageError('缺少模式：需要 --date、--fixture 或 --live 之一');
   if (modes.length > 1) usageError('--date、--fixture、--live、--help 不能同时使用（必须恰好一种模式）');
-  if (help) return { mode: 'help' };
-  if (live) return { mode: 'live' };
-  if (date !== undefined) {
-    if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
-    return { mode: 'date', date };
+  if (help) {
+    if (dryRun || out !== undefined) usageError('--help 不能与 --dry-run 或 --out 同时使用');
+    return { mode: 'help' };
   }
-  return { mode: 'fixture', fixture };
+  if (dryRun && out !== undefined) usageError('--dry-run 与 --out 不能同时使用');
+
+  let result;
+  if (live) {
+    result = { mode: 'live' };
+  } else if (date !== undefined) {
+    if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
+    result = { mode: 'date', date };
+  } else {
+    result = { mode: 'fixture', fixture };
+  }
+  if (dryRun) result.dryRun = true;
+  if (out !== undefined) result.out = out;
+  return result;
 }
 
 function readFixtureFile(absolutePath) {

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EPS,
   HIGH_CONFIDENCE_THRESHOLD,
+  LIVE_HEADERS,
   REPO_ROOT,
   BoardError,
   devig,
@@ -16,6 +17,7 @@ import {
   findLikelyDraw,
   analyzeFixture,
   renderHtml,
+  formatPlus08,
   parseArgs,
   validateFixture,
   mapLiveResponse,
@@ -68,6 +70,60 @@ function tempFixture(t, payload) {
   const file = path.join(dir, 'fixture.json');
   writeFileSync(file, typeof payload === 'string' ? payload : JSON.stringify(payload), 'utf8');
   return file;
+}
+
+function liveSub(overrides = {}) {
+  return {
+    matchStatus: 'Selling',
+    isHide: 0,
+    matchNumStr: '周日001',
+    leagueAbbName: '测试联赛',
+    homeTeamAbbName: '主队A',
+    awayTeamAbbName: '客队B',
+    matchDate: '2026-11-15',
+    matchTime: '13:00:00',
+    had: { h: '2.00', d: '3.30', a: '3.60' },
+    hhad: { h: '1.90', d: '3.40', a: '3.80', goalLine: '-1' },
+    ...overrides,
+  };
+}
+
+function liveRaw(subs, { totalCount = subs.length, lastUpdateTime = '2026-11-15 12:28:41' } = {}) {
+  return {
+    success: true,
+    value: {
+      lastUpdateTime,
+      totalCount,
+      matchInfoList: [{ businessDate: '2026-11-15', subMatchList: subs }],
+    },
+  };
+}
+
+function syntheticLiveFixture() {
+  return mapLiveResponse(
+    liveRaw([
+      liveSub(),
+      liveSub({
+        matchNumStr: '周日002',
+        homeTeamAbbName: '主队C',
+        awayTeamAbbName: '客队D',
+        matchTime: '15:00:00',
+        had: { h: '1.80', d: '3.50', a: '4.00' },
+        hhad: { h: '2.10', d: '3.30', a: '3.10', goalLine: '+1' },
+      }),
+      liveSub({
+        matchNumStr: '周日008',
+        leagueAbbName: '欧国联',
+        homeTeamAbbName: '芬兰',
+        awayTeamAbbName: '圣马力诺',
+        matchDate: '2026-11-16',
+        matchTime: '01:00:00',
+        had: {},
+        hhad: { h: '2.47', d: '4.62', a: '1.93', goalLine: '-4' },
+      }),
+    ]),
+    { capturedAt: NOW },
+  );
 }
 
 test('常量导出符合口径', () => {
@@ -427,12 +483,18 @@ test('renderHtml 覆盖快照、结构判断、五类分组、逐场明细与免
   assert.match(html, /输球输盘（0 场）/);
   assert.match(html, /可能平局（1 场）/);
   assert.ok(html.includes(LOSE_COVER_EMPTY_NOTE));
-  assert.ok(html.includes('本组无场次'));
+  assert.ok(html.includes('本日无此类（0 场）'));
+  assert.ok(!html.includes('本组无场次'));
 
   assert.ok(html.includes('西班牙 VS 英格兰'));
   assert.ok(html.includes('比利时 VS 意大利'));
 
-  const groupsHtml = html.slice(html.indexOf('id="groups"'), html.indexOf('id="matches"'));
+  assert.ok(html.includes('id="unclassified"'));
+  assert.ok(html.includes('数据不足（未分类）'));
+  assert.ok(html.indexOf('id="groups"') < html.indexOf('id="unclassified"'));
+  assert.ok(html.indexOf('id="unclassified"') < html.indexOf('id="matches"'));
+
+  const groupsHtml = html.slice(html.indexOf('id="groups"'), html.indexOf('id="unclassified"'));
   assert.ok(!groupsHtml.includes('西班牙 VS 英格兰'), 'pending 不得进入五类分组');
 
   assert.ok(html.includes('非赔率概率'));
@@ -476,39 +538,154 @@ test('renderHtml 转义所有动态文本', () => {
   assert.ok(html.includes('https://example.com/?a=1&amp;b=2'));
 });
 
-test('mapLiveResponse 将官方 JSON 接口离线快照映射为 fixture schema', () => {
-  const fixture = mapLiveResponse(LIVE_RAW, { capturedAt: NOW });
+test('mapLiveResponse 将官方 JSON 接口映射为 fixture schema（含单市场缺失）', () => {
+  const fixture = syntheticLiveFixture();
 
   assert.equal(fixture.date, '2026-11-15');
   assert.equal(fixture.capturedAt, NOW);
-  assert.equal(fixture.oddsUpdatedAt, '2026-11-15T10:19:44+08:00');
+  assert.equal(fixture.oddsUpdatedAt, '2026-11-15T12:28:41+08:00');
+  assert.equal(fixture.totalCount, 3);
+  assert.equal(fixture.skipped, 0);
   assert.deepEqual(fixture.pending, []);
-  assert.equal(fixture.matches.length, 5);
+  assert.equal(fixture.matches.length, 2);
+  assert.equal(fixture.unclassified.length, 1);
   assert.match(fixture.note, /--live/);
-  assert.match(fixture.note, /totalCount=5/);
+  assert.match(fixture.note, /totalCount=3/);
   assert.match(fixture.note, /未提供未开售场次/);
+  assert.match(fixture.note, /数据不足/);
 
-  const [first, , third] = fixture.matches;
+  const [first, second] = fixture.matches;
   assert.equal(first.no, '周日001');
-  assert.equal(first.league, '日联赛杯');
   assert.equal(first.kickoff, '2026-11-15T13:00:00+08:00');
-  assert.equal(first.home, '町田泽维');
-  assert.equal(first.away, '神户胜利');
   assert.equal(first.handicap, -1);
-  assert.deepEqual(first.spf, [2.24, 3.05, 2.74]);
-  assert.deepEqual(first.rqspf, [5.32, 3.75, 1.46]);
+  assert.deepEqual(first.spf, [2.0, 3.3, 3.6]);
+  assert.deepEqual(first.rqspf, [1.9, 3.4, 3.8]);
   assert.equal(first.support, undefined);
+  assert.deepEqual(second.spf, [1.8, 3.5, 4.0]);
+  assert.deepEqual(second.rqspf, [2.1, 3.3, 3.1]);
+  assert.equal(second.handicap, 1);
 
-  assert.equal(third.no, '周日003');
-  assert.equal(third.handicap, 1);
-  assert.deepEqual(third.spf, [2.45, 3.5, 2.25]);
-  assert.deepEqual(third.rqspf, [1.46, 4.15, 4.7]);
+  const eight = fixture.unclassified[0];
+  assert.equal(eight.no, '周日008');
+  assert.equal(eight.league, '欧国联');
+  assert.equal(eight.kickoff, '2026-11-16T01:00:00+08:00');
+  assert.equal(eight.home, '芬兰');
+  assert.equal(eight.away, '圣马力诺');
+  assert.equal(eight.handicap, -4);
+  assert.equal(eight.spf, null);
+  assert.deepEqual(eight.rqspf, [2.47, 4.62, 1.93]);
+  assert.match(eight.note, /SPF/);
 
   // 映射结果必须能通过正式校验并进入分析，且不补造 support。
   assert.equal(validateFixture(fixture), true);
   const report = analyzeFixture(fixture);
-  assert.equal(report.matches.length, 5);
+  assert.equal(report.matches.length, 2);
+  assert.equal(report.unclassified.length, 1);
+  assert.equal(report.totalCount, 3);
   assert.ok(report.matches.every((match) => match.support === undefined));
+
+  // 008 绝不进入五类分组 / 逐场明细 / 可能平局。
+  assert.deepEqual(report.likelyDraw.matches.map((match) => match.no), ['周日001']);
+  const html = renderHtml(report);
+  const groupsHtml = html.slice(html.indexOf('id="groups"'), html.indexOf('id="unclassified"'));
+  const matchesHtml = html.slice(html.indexOf('id="matches"'), html.indexOf('id="pending"'));
+  const unclassifiedHtml = html.slice(html.indexOf('id="unclassified"'), html.indexOf('id="matches"'));
+  assert.ok(!groupsHtml.includes('芬兰'));
+  assert.ok(!matchesHtml.includes('芬兰'));
+  assert.ok(unclassifiedHtml.includes('芬兰'));
+  assert.ok(unclassifiedHtml.includes('主让 4 球'));
+  assert.ok(unclassifiedHtml.includes('未开售（官方未提供）'));
+  assert.ok(html.includes('官方 totalCount：3 场（可分类 2 场；数据不足 1 场；跳过 0 场）'));
+  assert.ok(html.includes('已开售场次：3 场'));
+});
+
+test('本地官方快照可映射并通过校验，且满足 totalCount 不变式', () => {
+  const fixture = mapLiveResponse(LIVE_RAW, { capturedAt: NOW });
+  assert.equal(validateFixture(fixture), true);
+  assert.ok(fixture.matches.length + fixture.unclassified.length + fixture.skipped === fixture.totalCount);
+  assert.ok(fixture.matches.length + fixture.unclassified.length > 0);
+  for (const item of fixture.unclassified) {
+    assert.ok(item.spf === null || Array.isArray(item.spf));
+    assert.ok(item.rqspf === null || Array.isArray(item.rqspf));
+    assert.ok(item.spf !== null || item.rqspf !== null);
+  }
+});
+
+test('单市场缺失才进 unclassified，双市场缺失/不完整/键缺失一律 E_LIVE_FETCH', () => {
+  const bothMissing = liveRaw([liveSub({ had: {}, hhad: {} })]);
+  assert.throws(
+    () => mapLiveResponse(bothMissing, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && /两个市场|均不可用/.test(err.message),
+  );
+
+  const partialHad = liveRaw([liveSub({ had: { h: '2.00', d: '3.30' } })]);
+  assert.throws(
+    () => mapLiveResponse(partialHad, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('had'),
+  );
+
+  const undefinedHad = liveRaw([liveSub({ had: undefined })]);
+  assert.throws(
+    () => mapLiveResponse(undefinedHad, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('had'),
+  );
+
+  const badOdds = liveRaw([liveSub({ hhad: { h: '1.90', d: '3.40', a: '0.5', goalLine: '-1' } })]);
+  assert.throws(
+    () => mapLiveResponse(badOdds, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('hhad'),
+  );
+});
+
+test('totalCount 不变式不成立或无可分类场次时 E_LIVE_FETCH', () => {
+  const badTotal = liveRaw([liveSub()], { totalCount: 2 });
+  assert.throws(
+    () => mapLiveResponse(badTotal, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && /totalCount|不变式/.test(err.message),
+  );
+
+  const nothing = liveRaw([liveSub({ matchStatus: 'Canceled' })], { totalCount: 1 });
+  assert.throws(
+    () => mapLiveResponse(nothing, { capturedAt: NOW }),
+    (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && /没有任何可用/.test(err.message),
+  );
+
+  const badFixture = cloneFixture();
+  badFixture.totalCount = 99;
+  badFixture.skipped = 0;
+  assert.throws(
+    () => validateFixture(badFixture),
+    (err) => err instanceof BoardError && err.code === 'E_FIXTURE_SCHEMA' && /totalCount|不变式/.test(err.message),
+  );
+});
+
+test('validateFixture 接受唯一市场缺失的 unclassified 条目（含整数 |h|≥2）', () => {
+  const fixture = cloneFixture();
+  fixture.unclassified = [
+    {
+      no: '周日008',
+      league: '欧国联',
+      kickoff: '2026-11-16T01:00:00+08:00',
+      home: '芬兰',
+      away: '圣马力诺',
+      handicap: -4,
+      spf: null,
+      rqspf: [2.47, 4.62, 1.93],
+      note: '官方未开售 SPF，不参与推断。',
+    },
+  ];
+  fixture.totalCount = 6;
+  fixture.skipped = 0;
+  assert.equal(validateFixture(fixture), true);
+
+  const bothNull = cloneFixture();
+  bothNull.unclassified = [{ ...fixture.unclassified[0], spf: null, rqspf: null }];
+  bothNull.totalCount = 6;
+  bothNull.skipped = 0;
+  assert.throws(
+    () => validateFixture(bothNull),
+    (err) => err instanceof BoardError && err.code === 'E_FIXTURE_SCHEMA',
+  );
 });
 
 test('mapLiveResponse 结构异常一律抛 E_LIVE_FETCH', () => {
@@ -539,6 +716,101 @@ test('mapLiveResponse 结构异常一律抛 E_LIVE_FETCH', () => {
     () => mapLiveResponse('not-json', { capturedAt: NOW }),
     (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH',
   );
+});
+
+test('formatPlus08 固定输出 +08:00，且与宿主时区无关', () => {
+  assert.equal(formatPlus08('2026-11-15T04:28:41Z'), '2026-11-15T12:28:41+08:00');
+  assert.equal(formatPlus08('2026-11-15T12:28:41+08:00'), '2026-11-15T12:28:41+08:00');
+  assert.equal(formatPlus08(new Date('2026-11-15T00:00:00Z')), '2026-11-15T08:00:00+08:00');
+  assert.equal(formatPlus08(0), '1970-01-01T08:00:00+08:00');
+  assert.match(formatPlus08(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
+  assert.throws(() => formatPlus08('not-a-date'), RangeError);
+  assert.throws(() => formatPlus08(Number.NaN), RangeError);
+});
+
+test('JCZQ_NOW 覆盖归一化为 +08:00，非法或缺少时区退出码 1', (t) => {
+  const previous = process.env.JCZQ_NOW;
+  t.after(() => {
+    if (previous === undefined) delete process.env.JCZQ_NOW;
+    else process.env.JCZQ_NOW = previous;
+  });
+
+  process.env.JCZQ_NOW = '2026-11-15T04:28:41Z';
+  assert.equal(analyzeFixture(cloneFixture()).generatedAt, '2026-11-15T12:28:41+08:00');
+
+  process.env.JCZQ_NOW = '2026-11-15T12:28:41+08:00';
+  assert.equal(analyzeFixture(cloneFixture()).generatedAt, '2026-11-15T12:28:41+08:00');
+
+  for (const invalid of ['not-a-date', '2026-11-15T09:30:00']) {
+    const result = runCli(['--fixture', FIXTURE_PATH], { JCZQ_NOW: invalid });
+    assert.equal(result.status, 1, invalid);
+    assert.match(result.stderr, /\[E_INTERNAL\]/);
+  }
+});
+
+test('LIVE_HEADERS 使用桌面浏览器 UA 与官方 referer，且不含 cookie', () => {
+  assert.match(LIVE_HEADERS['user-agent'], /Mozilla\/5\.0/);
+  assert.equal(LIVE_HEADERS.referer, 'https://www.sporttery.cn/jc/jsq/zqspf/');
+  assert.equal(LIVE_HEADERS.accept, 'application/json, text/plain, */*');
+  assert.ok(!('cookie' in LIVE_HEADERS));
+});
+
+test('空组统一文案，LOSE_COVER_EMPTY_NOTE 仅在全为整数一球盘时附加', () => {
+  const previous = process.env.JCZQ_NOW;
+  process.env.JCZQ_NOW = NOW;
+  try {
+    const integerOnly = analyzeFixture(cloneFixture());
+    const integerHtml = renderHtml(integerOnly);
+    assert.ok(integerHtml.includes(LOSE_COVER_EMPTY_NOTE));
+
+    const halfFixture = cloneFixture();
+    halfFixture.matches = [syntheticMatch({ no: '周日100', handicap: -1.5, rqspf: [1.5, 4, 6] })];
+    const halfHtml = renderHtml(analyzeFixture(halfFixture));
+    assert.match(halfHtml, /输球赢盘（0 场）/);
+    assert.ok(halfHtml.includes('本日无此类（0 场）'));
+    assert.ok(!halfHtml.includes(LOSE_COVER_EMPTY_NOTE));
+  } finally {
+    if (previous === undefined) delete process.env.JCZQ_NOW;
+    else process.env.JCZQ_NOW = previous;
+  }
+});
+
+test('数据不足区转义所有动态文本，且空区也渲染', () => {
+  const fixture = {
+    date: '2026-11-15',
+    source: 'https://example.com/?a=1&b=2',
+    oddsUpdatedAt: '2026-11-15T12:28:41+08:00',
+    capturedAt: '2026-11-15T12:28:41+08:00',
+    note: 'n',
+    matches: [],
+    pending: [],
+    unclassified: [
+      {
+        no: '周日008',
+        league: 'L<i>',
+        kickoff: '2026-11-16T01:00:00+08:00',
+        home: 'A<b>',
+        away: 'C&D',
+        handicap: -4,
+        spf: null,
+        rqspf: [2.47, 4.62, 1.93],
+        note: '<script>alert(1)</script>',
+      },
+    ],
+  };
+  const html = renderHtml(analyzeFixture(fixture));
+  assert.ok(!html.includes('A<b>'));
+  assert.ok(!html.includes('L<i>'));
+  assert.ok(!html.includes('<script>alert(1)</script>'));
+  assert.ok(html.includes('A&lt;b&gt;'));
+  assert.ok(html.includes('C&amp;D'));
+  assert.ok(html.includes('L&lt;i&gt;'));
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  assert.ok(html.includes('未开售（官方未提供）'));
+
+  const emptyHtml = renderHtml(analyzeFixture(cloneFixture()));
+  const emptySection = emptyHtml.slice(emptyHtml.indexOf('id="unclassified"'), emptyHtml.indexOf('id="matches"'));
+  assert.match(emptySection, /本日无此类（0 场）/);
 });
 
 test('--live 网络不可达退出码 6，不依赖真实网络', () => {

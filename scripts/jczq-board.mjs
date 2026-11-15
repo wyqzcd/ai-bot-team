@@ -8,7 +8,7 @@
  * - 由 handicap 符号确定让球方；整数一球盘下 RQSPF 三项是让球方结果的三段划分。
  * - support 只做展示，不参与任何计算、排序或分组。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -484,6 +484,36 @@ export function analyzeFixture(fixture) {
     skipped: fixture.skipped ?? 0,
     likelyDraw: findLikelyDraw(matches),
     pending: fixture.pending,
+  };
+}
+
+/** --dry-run 的单行 JSON 摘要。纯函数：只读 analyzeFixture() 的返回值。 */
+export function buildDryRunSummary(report) {
+  const matches = report.matches;
+  const unclassified = report.unclassified ?? [];
+  const skipped = report.skipped ?? 0;
+  const groups = {
+    win_cover: 0,
+    win_no_cover: 0,
+    lose_cover: 0,
+    lose_no_cover: 0,
+    no_handicap: 0,
+    ambiguous: 0,
+  };
+  for (const match of matches) groups[match.group] += 1;
+  return {
+    oddsUpdatedAt: report.oddsUpdatedAt,
+    totalCount: report.totalCount ?? matches.length + unclassified.length + skipped,
+    matches: matches.length,
+    unclassified: unclassified.length,
+    skipped,
+    groups,
+    likelyDraw: report.likelyDraw
+      ? {
+          probability: report.likelyDraw.probability,
+          matches: report.likelyDraw.matches.map((match) => match.no),
+        }
+      : null,
   };
 }
 
@@ -1070,6 +1100,26 @@ async function loadLiveFixture() {
   };
 }
 
+/**
+ * --out 预检：纯 fs，不联网不写盘。父目录必须已存在（不 mkdir），目标不能是目录。
+ * 返回解析后的绝对路径。
+ */
+function resolveOutPath(raw) {
+  const absolutePath = path.resolve(raw);
+  const parent = path.dirname(absolutePath);
+  let parentStat;
+  try {
+    parentStat = statSync(parent);
+  } catch {
+    usageError(`--out 父目录不存在：${parent}`);
+  }
+  if (!parentStat.isDirectory()) usageError(`--out 父目录不是目录：${parent}`);
+  if (existsSync(absolutePath) && statSync(absolutePath).isDirectory()) {
+    usageError(`--out 目标是目录：${absolutePath}`);
+  }
+  return absolutePath;
+}
+
 async function main(argv) {
   const args = parseArgs(argv);
 
@@ -1077,6 +1127,9 @@ async function main(argv) {
     process.stdout.write(HELP_TEXT);
     return 0;
   }
+
+  // 预检先于任何 load/写盘：坏 --out 即使网络不可达也应返回用法错误。
+  const outPath = args.out !== undefined ? resolveOutPath(args.out) : undefined;
 
   let fixture;
   let outputDate;
@@ -1098,6 +1151,12 @@ async function main(argv) {
   }
 
   const report = analyzeFixture(fixture);
+
+  if (args.dryRun === true) {
+    process.stdout.write(`${JSON.stringify(buildDryRunSummary(report))}\n`);
+    return 0;
+  }
+
   const html = renderHtml(report);
 
   // 顺序：解析 → 映射 → validate → 渲染 → 写快照 → 写报告。
@@ -1112,9 +1171,19 @@ async function main(argv) {
     }
   }
 
-  const outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
-  mkdirSync(path.dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, html, 'utf8');
+  let outputPath;
+  if (outPath !== undefined) {
+    outputPath = outPath;
+    try {
+      writeFileSync(outputPath, html, 'utf8');
+    } catch (error) {
+      throw new BoardError('E_INTERNAL', `写报告失败：${outputPath}（${error.message}）`);
+    }
+  } else {
+    outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, html, 'utf8');
+  }
   process.stdout.write(`已生成报告：${outputPath}\n`);
   return 0;
 }

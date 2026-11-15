@@ -8,7 +8,7 @@
  * - 由 handicap 符号确定让球方；整数一球盘下 RQSPF 三项是让球方结果的三段划分。
  * - support 只做展示，不参与任何计算、排序或分组。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,8 +65,12 @@ const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
   node scripts/jczq-board.mjs --live                从官方 JSON 接口抓取实时数据
   node scripts/jczq-board.mjs --help                显示本帮助
 
-输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
---live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）。
+可选：
+  --out <path>     报告改写到指定路径（相对 cwd 或绝对路径；父目录须已存在）
+  --dry-run        只抓取/校验/分析并打印一行 JSON 摘要，不写任何文件（与 --out 互斥）
+
+默认输出 reports/<fixture.date>.html（与 cwd 无关）。
+--live 会同时刷新 fixtures/<fixture.date>.live-raw.json（官方响应原文快照）；--dry-run 不写该快照。
 环境变量：
   JCZQ_NOW       覆盖生成时间 generatedAt（带时区 ISO，便于复现）
   JCZQ_LIVE_URL  覆盖 --live 的抓取地址
@@ -483,6 +487,36 @@ export function analyzeFixture(fixture) {
   };
 }
 
+/** --dry-run 的单行 JSON 摘要。纯函数：只读 analyzeFixture() 的返回值。 */
+export function buildDryRunSummary(report) {
+  const matches = report.matches;
+  const unclassified = report.unclassified ?? [];
+  const skipped = report.skipped ?? 0;
+  const groups = {
+    win_cover: 0,
+    win_no_cover: 0,
+    lose_cover: 0,
+    lose_no_cover: 0,
+    no_handicap: 0,
+    ambiguous: 0,
+  };
+  for (const match of matches) groups[match.group] += 1;
+  return {
+    oddsUpdatedAt: report.oddsUpdatedAt,
+    totalCount: report.totalCount ?? matches.length + unclassified.length + skipped,
+    matches: matches.length,
+    unclassified: unclassified.length,
+    skipped,
+    groups,
+    likelyDraw: report.likelyDraw
+      ? {
+          probability: report.likelyDraw.probability,
+          matches: report.likelyDraw.matches.map((match) => match.no),
+        }
+      : null,
+  };
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => {
     switch (character) {
@@ -788,8 +822,10 @@ export function parseArgs(argv) {
 
   let fixture;
   let date;
+  let out;
   let live = false;
   let help = false;
+  let dryRun = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -799,7 +835,10 @@ export function parseArgs(argv) {
     } else if (arg === '--live') {
       mark('live');
       live = true;
-    } else if (arg === '--fixture' || arg === '--date') {
+    } else if (arg === '--dry-run') {
+      mark('dry-run');
+      dryRun = true;
+    } else if (arg === '--fixture' || arg === '--date' || arg === '--out') {
       const key = arg.slice(2);
       mark(key);
       const value = argv[index + 1];
@@ -808,7 +847,8 @@ export function parseArgs(argv) {
       }
       index += 1;
       if (key === 'fixture') fixture = value;
-      else date = value;
+      else if (key === 'date') date = value;
+      else out = value;
     } else if (arg.startsWith('-')) {
       usageError(`未知参数：${arg}`);
     } else {
@@ -825,13 +865,24 @@ export function parseArgs(argv) {
 
   if (modes.length === 0) usageError('缺少模式：需要 --date、--fixture 或 --live 之一');
   if (modes.length > 1) usageError('--date、--fixture、--live、--help 不能同时使用（必须恰好一种模式）');
-  if (help) return { mode: 'help' };
-  if (live) return { mode: 'live' };
-  if (date !== undefined) {
-    if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
-    return { mode: 'date', date };
+  if (help) {
+    if (dryRun || out !== undefined) usageError('--help 不能与 --dry-run 或 --out 同时使用');
+    return { mode: 'help' };
   }
-  return { mode: 'fixture', fixture };
+  if (dryRun && out !== undefined) usageError('--dry-run 与 --out 不能同时使用');
+
+  let result;
+  if (live) {
+    result = { mode: 'live' };
+  } else if (date !== undefined) {
+    if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
+    result = { mode: 'date', date };
+  } else {
+    result = { mode: 'fixture', fixture };
+  }
+  if (dryRun) result.dryRun = true;
+  if (out !== undefined) result.out = out;
+  return result;
 }
 
 function readFixtureFile(absolutePath) {
@@ -1049,6 +1100,26 @@ async function loadLiveFixture() {
   };
 }
 
+/**
+ * --out 预检：纯 fs，不联网不写盘。父目录必须已存在（不 mkdir），目标不能是目录。
+ * 返回解析后的绝对路径。
+ */
+function resolveOutPath(raw) {
+  const absolutePath = path.resolve(raw);
+  const parent = path.dirname(absolutePath);
+  let parentStat;
+  try {
+    parentStat = statSync(parent);
+  } catch {
+    usageError(`--out 父目录不存在：${parent}`);
+  }
+  if (!parentStat.isDirectory()) usageError(`--out 父目录不是目录：${parent}`);
+  if (existsSync(absolutePath) && statSync(absolutePath).isDirectory()) {
+    usageError(`--out 目标是目录：${absolutePath}`);
+  }
+  return absolutePath;
+}
+
 async function main(argv) {
   const args = parseArgs(argv);
 
@@ -1056,6 +1127,9 @@ async function main(argv) {
     process.stdout.write(HELP_TEXT);
     return 0;
   }
+
+  // 预检先于任何 load/写盘：坏 --out 即使网络不可达也应返回用法错误。
+  const outPath = args.out !== undefined ? resolveOutPath(args.out) : undefined;
 
   let fixture;
   let outputDate;
@@ -1077,6 +1151,12 @@ async function main(argv) {
   }
 
   const report = analyzeFixture(fixture);
+
+  if (args.dryRun === true) {
+    process.stdout.write(`${JSON.stringify(buildDryRunSummary(report))}\n`);
+    return 0;
+  }
+
   const html = renderHtml(report);
 
   // 顺序：解析 → 映射 → validate → 渲染 → 写快照 → 写报告。
@@ -1091,9 +1171,19 @@ async function main(argv) {
     }
   }
 
-  const outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
-  mkdirSync(path.dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, html, 'utf8');
+  let outputPath;
+  if (outPath !== undefined) {
+    outputPath = outPath;
+    try {
+      writeFileSync(outputPath, html, 'utf8');
+    } catch (error) {
+      throw new BoardError('E_INTERNAL', `写报告失败：${outputPath}（${error.message}）`);
+    }
+  } else {
+    outputPath = path.join(REPO_ROOT, 'reports', `${outputDate}.html`);
+    mkdirSync(path.dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, html, 'utf8');
+  }
   process.stdout.write(`已生成报告：${outputPath}\n`);
   return 0;
 }

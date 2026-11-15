@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import {
   parseArgs,
   validateFixture,
   mapLiveResponse,
+  toCstIso,
 } from '../../scripts/jczq-board.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/jczq-board.mjs', import.meta.url));
@@ -327,6 +328,11 @@ test('parseArgs 识别三种模式并拒绝非法组合', () => {
   });
   assert.deepEqual(parseArgs(['--live']), { mode: 'live' });
   assert.deepEqual(parseArgs(['--help']), { mode: 'help' });
+  assert.deepEqual(parseArgs(['--raw', 'snap.json', '--captured-at', '2026-11-15T10:42:36+08:00']), {
+    mode: 'raw',
+    raw: 'snap.json',
+    capturedAt: '2026-11-15T10:42:36+08:00',
+  });
 
   const bad = [
     [],
@@ -340,6 +346,13 @@ test('parseArgs 识别三种模式并拒绝非法组合', () => {
     ['--date', '2026-02-30'],
     ['--date', '2026-13-01'],
     ['--help', '--date', '2026-11-15'],
+    ['--raw'],
+    ['--raw', 'snap.json'],
+    ['--raw', 'snap.json', '--captured-at'],
+    ['--raw', 'snap.json', '--captured-at', 'not-a-time'],
+    ['--raw', 'snap.json', '--live'],
+    ['--raw', 'snap.json', '--help'],
+    ['--captured-at', '2026-11-15T10:42:36+08:00'],
   ];
   for (const argv of bad) {
     assert.throws(
@@ -427,7 +440,11 @@ test('renderHtml 覆盖快照、结构判断、五类分组、逐场明细与免
   assert.match(html, /输球输盘（0 场）/);
   assert.match(html, /可能平局（1 场）/);
   assert.ok(html.includes(LOSE_COVER_EMPTY_NOTE));
-  assert.ok(html.includes('本组无场次'));
+  assert.ok(html.includes('本日无此类场次'));
+  assert.ok(!html.includes('本组无场次'));
+  for (const groupId of ['win_cover', 'win_no_cover', 'lose_cover', 'lose_no_cover', 'likely_draw']) {
+    assert.ok(html.includes(`id="group-${groupId}"`), `缺少分组 section：${groupId}`);
+  }
 
   assert.ok(html.includes('西班牙 VS 英格兰'));
   assert.ok(html.includes('比利时 VS 意大利'));
@@ -541,6 +558,127 @@ test('mapLiveResponse 结构异常一律抛 E_LIVE_FETCH', () => {
   );
 });
 
+test('toCstIso 统一输出东八区、秒精度、无毫秒无 Z', () => {
+  assert.equal(toCstIso('2026-11-15T02:42:36.914Z'), '2026-11-15T10:42:36+08:00');
+  assert.equal(toCstIso(new Date('2026-11-15T02:42:36.914Z')), '2026-11-15T10:42:36+08:00');
+  assert.equal(toCstIso('2026-11-15T10:42:36+08:00'), '2026-11-15T10:42:36+08:00');
+
+  for (const bad of ['not-a-time', '', new Date('x'), 42, null, undefined]) {
+    assert.throws(
+      () => toCstIso(bad),
+      (err) => err instanceof BoardError && err.code === 'E_INTERNAL',
+      `应拒绝 ${String(bad)}`,
+    );
+  }
+});
+
+test('generatedAt 与 capturedAt 均规范化为 +08:00', (t) => {
+  const previous = process.env.JCZQ_NOW;
+  t.after(() => {
+    if (previous === undefined) delete process.env.JCZQ_NOW;
+    else process.env.JCZQ_NOW = previous;
+  });
+
+  delete process.env.JCZQ_NOW;
+  const defaultReport = analyzeFixture(cloneFixture());
+  assert.match(defaultReport.generatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
+
+  process.env.JCZQ_NOW = '2026-11-15T02:42:36.914Z';
+  assert.equal(analyzeFixture(cloneFixture()).generatedAt, '2026-11-15T10:42:36+08:00');
+
+  const mappedDefault = mapLiveResponse(LIVE_RAW);
+  assert.match(mappedDefault.capturedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
+  assert.equal(
+    mapLiveResponse(LIVE_RAW, { capturedAt: '2026-11-15T02:42:36.914Z' }).capturedAt,
+    '2026-11-15T10:42:36+08:00',
+  );
+});
+
+test('mapLiveResponse 透传 totalCount/skipped，并拒绝非法 totalCount', () => {
+  const fixture = mapLiveResponse(LIVE_RAW, { capturedAt: NOW });
+  assert.equal(fixture.totalCount, 5);
+  assert.equal(fixture.skipped, 0);
+
+  for (const bad of ['5', -1, 1.5, null]) {
+    const cloneRaw = JSON.parse(JSON.stringify(LIVE_RAW));
+    cloneRaw.value.totalCount = bad;
+    assert.throws(
+      () => mapLiveResponse(cloneRaw, { capturedAt: NOW }),
+      (err) => err instanceof BoardError && err.code === 'E_LIVE_FETCH' && err.message.includes('totalCount'),
+      `应拒绝 totalCount=${JSON.stringify(bad)}`,
+    );
+  }
+});
+
+test('validateFixture 对 totalCount 缺省容忍，存在时须为 ≥ matches.length 的非负整数', () => {
+  const mapped = mapLiveResponse(LIVE_RAW, { capturedAt: NOW });
+  assert.equal(validateFixture(mapped), true);
+  assert.equal(validateFixture(cloneFixture()), true, 'fixture 模式无 totalCount 时仍合法');
+
+  for (const bad of ['5', -1, 1.5, 4]) {
+    const fixture = JSON.parse(JSON.stringify(mapped));
+    fixture.totalCount = bad;
+    assert.throws(
+      () => validateFixture(fixture),
+      (err) => err instanceof BoardError && err.code === 'E_FIXTURE_SCHEMA' && err.message.includes('totalCount'),
+      `应拒绝 totalCount=${JSON.stringify(bad)}`,
+    );
+  }
+});
+
+test('vote 不进入映射，渲染后逐场区不出现人气与 vote 数值', () => {
+  const vote = { h: 123, d: 456, a: 789 };
+  const cloneRaw = JSON.parse(JSON.stringify(LIVE_RAW));
+  for (const group of cloneRaw.value.matchInfoList) {
+    for (const sub of group.subMatchList) sub.vote = { ...vote };
+  }
+
+  const fixture = mapLiveResponse(cloneRaw, { capturedAt: NOW });
+  assert.ok(fixture.matches.every((match) => match.support === undefined));
+
+  const html = renderHtml(analyzeFixture(fixture));
+  const matchesHtml = html.slice(html.indexOf('id="matches"'), html.indexOf('id="pending"'));
+  assert.ok(!matchesHtml.includes('人气'));
+  for (const value of Object.values(vote)) {
+    assert.ok(!matchesHtml.includes(String(value)), `逐场区不应出现 vote 数值 ${value}`);
+  }
+
+  assert.ok(renderHtml(analyzeFixture(cloneFixture())).includes('人气支持（非赔率概率）'));
+});
+
+test('--raw 离线重放生成报告，且不发起实时请求', (t) => {
+  const cloneRaw = JSON.parse(JSON.stringify(LIVE_RAW));
+  for (const group of cloneRaw.value.matchInfoList) {
+    group.businessDate = '2026-11-16';
+    for (const sub of group.subMatchList) {
+      sub.businessDate = '2026-11-16';
+      sub.matchDate = '2026-11-16';
+    }
+  }
+  const rawFile = tempFixture(t, cloneRaw);
+  const reportPath = path.join(REPO_ROOT, 'reports', '2026-11-16.html');
+  t.after(() => rmSync(reportPath, { force: true }));
+
+  const result = runCli(['--raw', rawFile, '--captured-at', '2026-11-15T10:42:36+08:00']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(existsSync(reportPath));
+
+  const html = readFileSync(reportPath, 'utf8');
+  assert.ok(html.includes('离线重放'));
+  assert.ok(!html.includes('本次报告来自 --live 实时抓取'));
+  assert.ok(html.includes('totalCount'));
+  assert.ok(html.includes('capturedAt=2026-11-15T10:42:36+08:00'));
+  assert.ok(!html.includes(REPO_ROOT), '报告不得泄漏仓库绝对路径');
+  assert.ok(
+    html.includes('https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry'),
+    'source 应保留官方接口地址',
+  );
+
+  const missingCapturedAt = runCli(['--raw', rawFile]);
+  assert.equal(missingCapturedAt.status, 2);
+  assert.match(missingCapturedAt.stderr, /\[E_USAGE\]/);
+});
+
 test('--live 网络不可达退出码 6，不依赖真实网络', () => {
   const result = runCli(['--live'], { JCZQ_LIVE_URL: 'http://127.0.0.1:1/' });
   assert.equal(result.status, 6);
@@ -552,4 +690,28 @@ test('--live 响应不是 JSON 退出码 6', () => {
   assert.equal(result.status, 6);
   assert.match(result.stderr, /\[E_LIVE_FETCH\]/);
   assert.match(result.stderr, /不是 JSON/);
+});
+
+test('--live 失败时 reports/2026-11-15.html 的内容与 mtime 均不变', () => {
+  const reportPath = path.join(REPO_ROOT, 'reports', '2026-11-15.html');
+  const before = {
+    content: readFileSync(reportPath, 'utf8'),
+    mtimeMs: statSync(reportPath).mtimeMs,
+  };
+
+  for (const [name, url] of [
+    ['不可达', 'http://127.0.0.1:1/'],
+    ['非 JSON', 'data:text/plain,not-json'],
+  ]) {
+    const result = runCli(['--live'], { JCZQ_LIVE_URL: url });
+    assert.equal(result.status, 6, name);
+    assert.match(result.stderr, /\[E_LIVE_FETCH\]/, name);
+  }
+
+  const after = {
+    content: readFileSync(reportPath, 'utf8'),
+    mtimeMs: statSync(reportPath).mtimeMs,
+  };
+  assert.equal(after.content, before.content);
+  assert.equal(after.mtimeMs, before.mtimeMs);
 });

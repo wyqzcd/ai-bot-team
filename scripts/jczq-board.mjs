@@ -50,18 +50,20 @@ const DEFAULT_LIVE_URL =
 
 const HELP_TEXT = `竞彩足球盘口看板（零依赖 ESM）
 
-用法（三种模式互斥，必须且只能选一种）：
+用法（四种模式互斥，必须且只能选一种）：
   node scripts/jczq-board.mjs --date <YYYY-MM-DD>   读取 fixtures/<date>.json
   node scripts/jczq-board.mjs --fixture <path>      读取指定 JSON（相对仓库根，也接受绝对路径）
   node scripts/jczq-board.mjs --live                从官方 JSON 接口抓取实时数据
+  node scripts/jczq-board.mjs --raw <path> --captured-at <ISO>
+                                                    离线重放官方响应快照（不联网）
   node scripts/jczq-board.mjs --help                显示本帮助
 
 输出恒为 reports/<fixture.date>.html（与 cwd 无关）。
 环境变量：
   JCZQ_NOW       覆盖生成时间 generatedAt（带时区 ISO，便于复现）
   JCZQ_LIVE_URL  覆盖 --live 的抓取地址
-退出码：0 成功，1 内部错误，2 用法错误，3 fixture 不存在，4 JSON 非法，
-        5 schema/赔率非法，6 实时抓取失败。
+退出码：0 成功，1 内部错误，2 用法错误，3 fixture/快照不存在，4 JSON 非法，
+        5 schema/赔率非法，6 实时抓取或快照映射失败。
 `;
 
 export class BoardError extends Error {
@@ -347,6 +349,14 @@ export function validateFixture(fixture, { date } = {}) {
   }
   if (!Array.isArray(fixture.matches)) schemaError('fixture.matches 必须是数组');
   if (!Array.isArray(fixture.pending)) schemaError('fixture.pending 必须是数组');
+  if (fixture.totalCount !== undefined) {
+    if (!Number.isInteger(fixture.totalCount) || fixture.totalCount < 0) {
+      schemaError('fixture.totalCount 必须是非负整数');
+    }
+    if (fixture.totalCount < fixture.matches.length) {
+      schemaError(`fixture.totalCount（${fixture.totalCount}）不能小于已开售场次数（${fixture.matches.length}）`);
+    }
+  }
 
   const seenNos = new Set();
   fixture.matches.forEach((match, index) => validateMatch(match, index, seenNos));
@@ -355,15 +365,33 @@ export function validateFixture(fixture, { date } = {}) {
   return true;
 }
 
+/**
+ * 统一输出东八区、秒精度、不带毫秒/Z 的 ISO 时间（YYYY-MM-DDTHH:mm:ss+08:00）。
+ * 非法输入抛 BoardError(E_INTERNAL)。
+ */
+export function toCstIso(value) {
+  const date = value instanceof Date
+    ? value
+    : typeof value === 'string' && value.trim() !== ''
+      ? new Date(value)
+      : new Date(Number.NaN);
+  if (Number.isNaN(date.getTime())) {
+    throw new BoardError('E_INTERNAL', `无法解析为时间：${String(value)}`);
+  }
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return `${shifted.toISOString().slice(0, 19)}+08:00`;
+}
+
 function currentTimestamp() {
   const override = process.env.JCZQ_NOW;
   if (override !== undefined && override !== '') {
-    if (Number.isNaN(Date.parse(override))) {
+    try {
+      return toCstIso(override);
+    } catch {
       throw new BoardError('E_INTERNAL', `JCZQ_NOW 不是合法时间：${override}`);
     }
-    return override;
   }
-  return new Date().toISOString();
+  return toCstIso(new Date());
 }
 
 /** 生成看板数据（不含 HTML）。 */
@@ -380,6 +408,8 @@ export function analyzeFixture(fixture) {
     matches,
     likelyDraw: findLikelyDraw(matches),
     pending: fixture.pending,
+    totalCount: fixture.totalCount,
+    skipped: fixture.skipped,
   };
 }
 
@@ -427,7 +457,7 @@ function groupItems(report, groupId) {
 function renderGroupSection(groupId, label, items, extraEmptyNote, drawProbability) {
   let body;
   if (items.length === 0) {
-    body = '<p class="empty">本组无场次</p>';
+    body = '<p class="empty">本日无此类场次</p>';
     if (extraEmptyNote) body += `<p class="empty">${escapeHtml(extraEmptyNote)}</p>`;
   } else {
     const list = items
@@ -463,11 +493,16 @@ function renderStructure(report) {
     : '<p>无</p>';
 
   const ambiguousNos = ambiguous.length ? ambiguous.map((match) => escapeHtml(match.no)).join('、') : '无';
+  const totalCountLine =
+    report.totalCount !== undefined
+      ? `<li>官方 totalCount：${report.totalCount}（已开售 ${matches.length}，跳过 ${report.skipped ?? 0}）</li>`
+      : '';
 
   return `<section id="structure"><h2>结构性判断</h2>
 <ul>
 <li>是否全为整数一球盘：${allIntegerOneBall ? '是' : '否'}</li>
 <li>已开售场次：${matches.length} 场（整数盘：${integerMatches.length} 场，半盘：${halfMatches.length} 场）</li>
+${totalCountLine}
 <li>高置信场次：${highConfidence.length} 场</li>
 </ul>
 ${highList}
@@ -635,6 +670,8 @@ export function parseArgs(argv) {
 
   let fixture;
   let date;
+  let raw;
+  let capturedAt;
   let live = false;
   let help = false;
 
@@ -646,7 +683,7 @@ export function parseArgs(argv) {
     } else if (arg === '--live') {
       mark('live');
       live = true;
-    } else if (arg === '--fixture' || arg === '--date') {
+    } else if (arg === '--fixture' || arg === '--date' || arg === '--raw' || arg === '--captured-at') {
       const key = arg.slice(2);
       mark(key);
       const value = argv[index + 1];
@@ -655,7 +692,9 @@ export function parseArgs(argv) {
       }
       index += 1;
       if (key === 'fixture') fixture = value;
-      else date = value;
+      else if (key === 'date') date = value;
+      else if (key === 'raw') raw = value;
+      else capturedAt = value;
     } else if (arg.startsWith('-')) {
       usageError(`未知参数：${arg}`);
     } else {
@@ -663,17 +702,29 @@ export function parseArgs(argv) {
     }
   }
 
+  if (capturedAt !== undefined) {
+    if (raw === undefined) usageError('--captured-at 只能与 --raw 一起使用');
+    if (!isIsoWithTimezone(capturedAt)) {
+      usageError(`--captured-at 非法：${capturedAt}（需要带时区的 ISO 时间）`);
+    }
+  }
+  if (raw !== undefined && capturedAt === undefined) {
+    usageError('--raw 必须同时提供 --captured-at');
+  }
+
   const modes = [
     help && 'help',
     live && 'live',
+    raw !== undefined && 'raw',
     fixture !== undefined && 'fixture',
     date !== undefined && 'date',
   ].filter(Boolean);
 
-  if (modes.length === 0) usageError('缺少模式：需要 --date、--fixture 或 --live 之一');
-  if (modes.length > 1) usageError('--date、--fixture、--live、--help 不能同时使用（必须恰好一种模式）');
+  if (modes.length === 0) usageError('缺少模式：需要 --date、--fixture、--live 或 --raw 之一');
+  if (modes.length > 1) usageError('--date、--fixture、--live、--raw、--help 不能同时使用（必须恰好一种模式）');
   if (help) return { mode: 'help' };
   if (live) return { mode: 'live' };
+  if (raw !== undefined) return { mode: 'raw', raw, capturedAt };
   if (date !== undefined) {
     if (!isIsoDate(date)) usageError(`--date 非法：${date}（需要合法的 YYYY-MM-DD）`);
     return { mode: 'date', date };
@@ -681,20 +732,20 @@ export function parseArgs(argv) {
   return { mode: 'fixture', fixture };
 }
 
-function readFixtureFile(absolutePath) {
+function readFixtureFile(absolutePath, label = 'fixture') {
   if (!existsSync(absolutePath)) {
-    throw new BoardError('E_FIXTURE_NOT_FOUND', `找不到 fixture 文件：${absolutePath}`);
+    throw new BoardError('E_FIXTURE_NOT_FOUND', `找不到 ${label} 文件：${absolutePath}`);
   }
   let text;
   try {
     text = readFileSync(absolutePath, 'utf8');
   } catch (error) {
-    throw new BoardError('E_FIXTURE_NOT_FOUND', `无法读取 fixture 文件：${absolutePath}（${error.message}）`);
+    throw new BoardError('E_FIXTURE_NOT_FOUND', `无法读取 ${label} 文件：${absolutePath}（${error.message}）`);
   }
   try {
     return JSON.parse(text);
   } catch (error) {
-    throw new BoardError('E_FIXTURE_JSON', `fixture JSON 非法：${absolutePath}（${error.message}）`);
+    throw new BoardError('E_FIXTURE_JSON', `${label} JSON 非法：${absolutePath}（${error.message}）`);
   }
 }
 
@@ -702,7 +753,7 @@ function readFixtureFile(absolutePath) {
  * 把官方 JSON 接口响应映射为 fixture schema。纯函数，便于离线单测。
  * 结构不符或赔率缺失一律抛 BoardError(E_LIVE_FETCH)，不静默降级到 fixture。
  */
-export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIVE_URL } = {}) {
+export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIVE_URL, replay = false, snapshotLabel } = {}) {
   const fail = (detail) => {
     throw new BoardError('E_LIVE_FETCH', `实时数据解析失败（${source}）：${detail}`);
   };
@@ -722,8 +773,12 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
     fail(`value.lastUpdateTime 无法转为带时区 ISO 时间（${value.lastUpdateTime}）`);
   }
 
-  const captured = capturedAt ?? now ?? currentTimestamp();
-  if (!isIsoWithTimezone(captured)) fail(`capturedAt 必须是带时区的 ISO 时间（${captured}）`);
+  let captured;
+  try {
+    captured = toCstIso(capturedAt ?? now ?? currentTimestamp());
+  } catch {
+    fail(`capturedAt 必须是带时区的 ISO 时间（${capturedAt ?? now}）`);
+  }
 
   const matches = [];
   let skipped = 0;
@@ -793,10 +848,17 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
   }
   if (date === undefined) fail('无法从响应确定比赛日期（businessDate）');
 
-  const totalCount = Number.isFinite(Number(value.totalCount)) ? Number(value.totalCount) : matches.length;
+  const totalCount = value.totalCount;
+  if (!Number.isInteger(totalCount) || totalCount < 0) {
+    fail(`value.totalCount 必须是非负整数（${JSON.stringify(totalCount)}）`);
+  }
   if (matches.length === 0) fail(`响应中没有任何可用的已开售场次（totalCount=${totalCount}）`);
 
-  let note = `本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=${totalCount}，未提供未开售场次，本看板不推断`;
+  const snapshotPart = isNonEmptyString(snapshotLabel) ? ` ${snapshotLabel}` : '';
+  const lead = replay
+    ? `本报告由官方响应快照离线重放（--raw${snapshotPart}，未发起新的实时请求；capturedAt=${captured}）；`
+    : '本次报告来自 --live 实时抓取（官方 JSON 接口）；';
+  let note = `${lead}实时接口返回 totalCount=${totalCount}，未提供未开售场次，本看板不推断`;
   if (skipped > 0) note += `；另有 ${skipped} 场非开售/隐藏场次已跳过，未补造数据`;
 
   return {
@@ -807,6 +869,8 @@ export function mapLiveResponse(apiJson, { capturedAt, now, source = DEFAULT_LIV
     note,
     matches,
     pending: [],
+    totalCount,
+    skipped,
   };
 }
 
@@ -858,6 +922,17 @@ async function main(argv) {
   let outputDate;
   if (args.mode === 'live') {
     fixture = await loadLiveFixture();
+    validateFixture(fixture);
+    outputDate = fixture.date;
+  } else if (args.mode === 'raw') {
+    const rawPath = path.resolve(REPO_ROOT, args.raw);
+    const apiJson = readFixtureFile(rawPath, '快照');
+    fixture = mapLiveResponse(apiJson, {
+      capturedAt: args.capturedAt,
+      source: DEFAULT_LIVE_URL,
+      replay: true,
+      snapshotLabel: path.relative(REPO_ROOT, rawPath),
+    });
     validateFixture(fixture);
     outputDate = fixture.date;
   } else if (args.mode === 'date') {

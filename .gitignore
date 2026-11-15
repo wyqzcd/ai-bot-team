@@ -4,6 +4,7 @@ demo/node_modules/
 .claude/plugins/
 config/verification/*.json
 !config/verification/.gitkeep
+!config/verification/2026-11-15-board-v2.json
 bot-run.json
 score-comment.md
 dispatch-prompt.txt

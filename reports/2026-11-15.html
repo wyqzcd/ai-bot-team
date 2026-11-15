@@ -29,16 +29,17 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 <h1>竞彩足球盘口看板 · 2026-11-15</h1>
 <section id="snapshot"><h2>数据快照</h2>
 <ul>
-<li>抓取时间 capturedAt：2026-11-15T02:42:36.914Z</li>
-<li>生成时间 generatedAt：2026-11-15T02:42:36.917Z</li>
+<li>抓取时间 capturedAt：2026-11-15T10:42:36+08:00</li>
+<li>生成时间 generatedAt：2026-11-15T12:36:35+08:00</li>
 <li>官方赔率更新时间 oddsUpdatedAt：2026-11-15T10:19:44+08:00</li>
 <li>来源 source：<span class="mono">https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&amp;channel=c</span></li>
-<li>备注 note：本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=5，未提供未开售场次，本看板不推断</li>
+<li>备注 note：本报告由官方响应快照离线重放（--raw fixtures/2026-11-15.live-raw.json，未发起新的实时请求；capturedAt=2026-11-15T10:42:36+08:00）；实时接口返回 totalCount=5，未提供未开售场次，本看板不推断</li>
 </ul></section>
 <section id="structure"><h2>结构性判断</h2>
 <ul>
 <li>是否全为整数一球盘：是</li>
 <li>已开售场次：5 场（整数盘：5 场，半盘：0 场）</li>
+<li>官方 totalCount：5（已开售 5，跳过 0）</li>
 <li>高置信场次：2 场</li>
 </ul>
 <ul><li>周日001 — RQSPF 让球客胜 60.10%</li><li>周日003 — RQSPF 让球主胜 60.15%</li></ul>
@@ -48,7 +49,7 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 <li>未开售（pending）：0 条</li>
 </ul></section>
 <section id="groups"><h2>五类分组</h2>
-<section id="group-win_cover" class="group"><h3>赢球赢盘（2 场）</h3><ul><li>周日002 日联赛杯 鹿岛鹿角 VS 横滨水手</li><li>周日004 日联赛杯 柏太阳神 VS 川崎前锋</li></ul></section><section id="group-win_no_cover" class="group"><h3>赢球赢不了盘（3 场）</h3><ul><li>周日001 日联赛杯 町田泽维 VS 神户胜利</li><li>周日003 日联赛杯 大阪樱花 VS 浦和红钻</li><li>周日005 荷乙 马斯特里 VS 维迪斯</li></ul></section><section id="group-lose_cover" class="group"><h3>输球赢盘（0 场）</h3><p class="empty">本组无场次</p><p class="empty">整数一球盘下，输 1 球为走盘（让球平），受让方输球不可能赢盘；真正的「输球赢盘」需要半盘。本批无半盘，该组恒为空，未硬凑场次、未虚构半盘。</p></section><section id="group-lose_no_cover" class="group"><h3>输球输盘（0 场）</h3><p class="empty">本组无场次</p></section>
+<section id="group-win_cover" class="group"><h3>赢球赢盘（2 场）</h3><ul><li>周日002 日联赛杯 鹿岛鹿角 VS 横滨水手</li><li>周日004 日联赛杯 柏太阳神 VS 川崎前锋</li></ul></section><section id="group-win_no_cover" class="group"><h3>赢球赢不了盘（3 场）</h3><ul><li>周日001 日联赛杯 町田泽维 VS 神户胜利</li><li>周日003 日联赛杯 大阪樱花 VS 浦和红钻</li><li>周日005 荷乙 马斯特里 VS 维迪斯</li></ul></section><section id="group-lose_cover" class="group"><h3>输球赢盘（0 场）</h3><p class="empty">本日无此类场次</p><p class="empty">整数一球盘下，输 1 球为走盘（让球平），受让方输球不可能赢盘；真正的「输球赢盘」需要半盘。本批无半盘，该组恒为空，未硬凑场次、未虚构半盘。</p></section><section id="group-lose_no_cover" class="group"><h3>输球输盘（0 场）</h3><p class="empty">本日无此类场次</p></section>
 <section id="group-likely_draw" class="group"><h3>可能平局（1 场）</h3><ul><li>周日001 日联赛杯 町田泽维 VS 神户胜利（平局 28.78%）</li></ul></section>
 </section>
 <section id="matches"><h2>逐场明细</h2>

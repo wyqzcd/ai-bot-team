@@ -1,0 +1,157 @@
+{
+  "taskId": "2026-11-15-board-v2",
+  "result": "fail",
+  "checks": [
+    {
+      "name": "demo 项目测试套件",
+      "command": "cd demo && node --test",
+      "passed": true,
+      "evidence": "# tests 51 | # suites 0 | # pass 51 | # fail 0 | # cancelled 0 | # skipped 0 | # todo 0 | # duration_ms 622.562557; 进程退出码 0"
+    },
+    {
+      "name": "官方接口实时抓取可达性（真实 URL）",
+      "command": "node scripts/jczq-board.mjs --live",
+      "passed": false,
+      "evidence": "[E_LIVE_FETCH] 实时数据抓取失败（https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&channel=c）：HTTP 567；exit=6。环境 WAF 拒绝，无法实时抓取。"
+    },
+    {
+      "name": "失败路径前后报告哈希稳定",
+      "command": "sha256sum reports/2026-11-15.html（三条失败路径运行前后）",
+      "passed": true,
+      "evidence": "sha256_before=ced30dae4423bb2fb4a6d5ed360b0aebb1273016876406037e45a4221437adf1; sha256_after=ced30dae4423bb2fb4a6d5ed360b0aebb1273016876406037e45a4221437adf1; HASH_UNCHANGED=true"
+    },
+    {
+      "name": "独立验收比对脚本",
+      "command": "node /tmp/verify-board.mjs（读取 fixtures/2026-11-15.live-raw.json 与 reports/2026-11-15.html，导入 scripts/jczq-board.mjs 复算）",
+      "passed": false,
+      "evidence": "AC1a/AC1b/AC2/AC3/AC4/AC7/AC8/AC9e 通过；AC10 不通过（离线重放，非本次实时抓取）。详见 acceptance。"
+    }
+  ],
+  "acceptance": [
+    {
+      "criterion": "1a. 场次数 = 官方 totalCount",
+      "passed": true,
+      "evidence": "raw.value.totalCount=5；HTML 中 <article class=\"match\"> 数=5；结构行「已开售场次：5 场」。"
+    },
+    {
+      "criterion": "1b. 每场 SPF / RQSPF 与官方 had / hhad 一一比对一致",
+      "passed": true,
+      "evidence": "逐场比对：周日001 SPF 2.24 / 3.05 / 2.74 vs 2.24 / 3.05 / 2.74，RQ 5.32 / 3.75 / 1.46 vs 5.32 / 3.75 / 1.46；周日002 1.55 / 3.90 / 4.20 vs 1.55 / 3.90 / 4.20，RQ 2.71 / 3.40 / 2.10 一致；周日003 2.45 / 3.50 / 2.25，RQ 1.46 / 4.15 / 4.70 一致；周日004 1.81 / 3.80 / 3.09，RQ 3.46 / 3.72 / 1.72 一致；周日005 2.90 / 3.45 / 1.98，RQ 1.62 / 3.70 / 3.98 一致。5 场全部一致。"
+    },
+    {
+      "criterion": "2. 报告 oddsUpdatedAt = 官方 lastUpdateTime（+08:00）",
+      "passed": true,
+      "evidence": "raw.value.lastUpdateTime=\"2026-11-15 10:19:44\" -> 期望 2026-11-15T10:19:44+08:00；报告「官方赔率更新时间 oddsUpdatedAt：2026-11-15T10:19:44+08:00」，一致。"
+    },
+    {
+      "criterion": "3. 五个分组 section（win_cover / win_no_cover / lose_cover / lose_no_cover / likely_draw）全部存在；空组含「本日无此类场次」",
+      "passed": true,
+      "evidence": "win_cover 2 场；win_no_cover 3 场；lose_cover 0 场且含「本日无此类场次」；lose_no_cover 0 场且含「本日无此类场次」；likely_draw 1 场。五个 section id 均存在，未整组省略。"
+    },
+    {
+      "criterion": "4. 每组内场次与 classifyMatch 复算结果一致（含分组行与 section 成员）",
+      "passed": true,
+      "evidence": "mapLiveResponse(raw) + classifyMatch 复算：周日001 win_no_cover(赢球赢不了盘) 与报告分组行及组内成员一致；周日002 win_cover 一致；周日003 win_no_cover 一致；周日004 win_cover 一致；周日005 win_no_cover 一致；likely_draw 复算=周日001 与报告组内成员一致。"
+    },
+    {
+      "criterion": "5. cd demo && node --test 全绿",
+      "passed": true,
+      "evidence": "# tests 51 / # pass 51 / # fail 0 / # cancelled 0 / # skipped 0；退出码 0。"
+    },
+    {
+      "criterion": "6. 三条失败路径均退出码 6 + [E_LIVE_FETCH]，且报告 sha256 不变",
+      "passed": true,
+      "evidence": "①真实官方 URL：HTTP 567，exit=6，[E_LIVE_FETCH]；②JCZQ_LIVE_URL=http://127.0.0.1:1/：fetch failed，exit=6，[E_LIVE_FETCH]；③JCZQ_LIVE_URL=data:text/plain,not-json：响应不是 JSON，exit=6，[E_LIVE_FETCH]。运行前后 sha256 均为 ced30dae4423bb2fb4a6d5ed360b0aebb1273016876406037e45a4221437adf1，HASH_UNCHANGED=true。"
+    },
+    {
+      "criterion": "7. 周日001 article 不出现旧 fixture 赔率 2.32 / 3.10 / 2.60，且出现 2.24 / 3.05 / 2.74 与 5.32 / 3.75 / 1.46",
+      "passed": true,
+      "evidence": "周日001 article 内旧赔率命中=[]；新 SPF 2.24 / 3.05 / 2.74 命中=true；新 RQSPF 5.32 / 3.75 / 1.46 命中=true。旧 fixture 中周日001 为 2.32 / 3.10 / 2.60，未混入。"
+    },
+    {
+      "criterion": "8. 未编造 support：raw vote 空/缺失时不得出现人气或 vote 数值；映射结果 support === undefined",
+      "passed": true,
+      "evidence": "raw vote 全为空对象 {}，提取到的 vote 值=[]；mapLiveResponse 后 5 场 support 全部 === undefined；逐场明细区含「人气」=false；逐场区 vote 数值泄漏=[]。说明：全文「人气」出现 1 次，位于静态「口径限制」说明文字（support 人气数据不是赔率概率），属通用说明而非逐场数据，未编造任何人气数值。"
+    },
+    {
+      "criterion": "9a. 报告无外链 / script / link / href / src",
+      "passed": true,
+      "evidence": "对 reports/2026-11-15.html 正则检查：无 <script、无 <link、无 href=、无 src=、无 url(；命中数 0。"
+    },
+    {
+      "criterion": "9b. source 为官方接口 URL 而非本机绝对路径",
+      "passed": true,
+      "evidence": "source=https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&amp;channel=c；不含 /home/runner 本机路径。"
+    },
+    {
+      "criterion": "9c. capturedAt / generatedAt 均以 +08:00 结尾",
+      "passed": true,
+      "evidence": "capturedAt=2026-11-15T10:42:36+08:00；generatedAt=2026-11-15T12:36:35+08:00；二者均符合 YYYY-MM-DDTHH:mm:ss+08:00。"
+    },
+    {
+      "criterion": "9d. package.json 未新增依赖",
+      "passed": true,
+      "evidence": "git diff -- demo/package.json package.json 无输出；demo/package.json 无 dependencies/devDependencies；仓库根无 package.json。"
+    },
+    {
+      "criterion": "9e. 测试不发起真实网络请求（失败路径仅用 127.0.0.1:1 与 data: URL 模拟）",
+      "passed": true,
+      "evidence": "检查 demo/test/jczq-board.test.js 全部 runCli 调用：--live 仅出现在两条失败路径用例，且分别注入 JCZQ_LIVE_URL=http://127.0.0.1:1/ 与 data:text/plain,not-json；其余用例为 --fixture/--date/--help/--raw，均不联网。第 469/493 行 https://example.com/?a=1&b=2 与第 673 行官方 URL 仅为 HTML 转义用例数据与 source 断言字符串（惰性字符串，未发起请求）。测试未使用默认官方 URL 发起任何请求。"
+    },
+    {
+      "criterion": "10. 报告由本次实时抓取生成（硬要求）",
+      "passed": false,
+      "evidence": "官方接口本次实测 HTTP 567（exit=6，[E_LIVE_FETCH]），无法实时抓取。报告 note 原文：「本报告由官方响应快照离线重放（--raw fixtures/2026-11-15.live-raw.json，未发起新的实时请求；capturedAt=2026-11-15T10:42:36+08:00）；实时接口返回 totalCount=5，未提供未开售场次，本看板不推断」。报告为离线重放，不满足「本次实时抓取生成」。"
+    }
+  ],
+  "counterexamples": [
+    {
+      "input": "value.totalCount = \"5\"（字符串）",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-str.json --captured-at 2026-11-15T10:42:36+08:00",
+      "observed": "[E_LIVE_FETCH] 实时数据解析失败（...官方URL...）：value.totalCount 必须是非负整数（\"5\"）；exit=6",
+      "isBug": false
+    },
+    {
+      "input": "value.totalCount = -1（负数）",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-neg.json --captured-at 2026-11-15T10:42:36+08:00",
+      "observed": "[E_LIVE_FETCH] ... value.totalCount 必须是非负整数（-1）；exit=6",
+      "isBug": false
+    },
+    {
+      "input": "value.totalCount = 1.5（非整数）",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-frac.json --captured-at 2026-11-15T10:42:36+08:00",
+      "observed": "[E_LIVE_FETCH] ... value.totalCount 必须是非负整数（1.5）；exit=6",
+      "isBug": false
+    },
+    {
+      "input": "value.totalCount = 3（小于 matches 数 5）",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-less.json --captured-at 2026-11-15T10:42:36+08:00",
+      "observed": "[E_FIXTURE_SCHEMA] fixture.totalCount（3）不能小于已开售场次数（5）；exit=5。映射阶段放行，随后 validateFixture 拒绝，符合 E_FIXTURE_SCHEMA 预期。",
+      "isBug": false
+    },
+    {
+      "input": "--raw 缺少 --captured-at",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-str.json",
+      "observed": "[E_USAGE] --raw 必须同时提供 --captured-at；exit=2",
+      "isBug": false
+    },
+    {
+      "input": "--raw 与 --live 同用",
+      "repro": "node scripts/jczq-board.mjs --raw /tmp/qa-board/raw-str.json --captured-at 2026-11-15T10:42:36+08:00 --live",
+      "observed": "[E_USAGE] --date、--fixture、--live、--raw、--help 不能同时使用（必须恰好一种模式）；exit=2",
+      "isBug": false
+    },
+    {
+      "input": "向 raw 副本每场注入非空 vote={h:123,d:456,a:789}",
+      "repro": "mapLiveResponse(rawWithVote) + analyzeFixture + renderHtml，检查 support 与逐场明细区",
+      "observed": "support_all_undefined=true；matches_section_has_renqi=false；matches_section_has_vote_values=[]。非空 vote 仍不映射为 support，不渲染人气。",
+      "isBug": false
+    }
+  ],
+  "knownGaps": [
+    "环境 WAF 导致无法实时抓取：官方接口 https://webapi.sporttery.cn/... 本次实测 HTTP 567（exit=6，[E_LIVE_FETCH]），故第 10 条硬要求不通过。报告为官方响应快照 fixtures/2026-11-15.live-raw.json 经 --raw 离线重放生成，note 已显式写明「未发起新的实时请求」，未伪造抓取时间。",
+    "loadLiveFixture 的「抓取成功后解析并写报告」正向路径在本环境无法端到端验证；仅通过 mapLiveResponse 对快照做离线映射与单测覆盖，真实网络成功路径未执行。",
+    "快照 capturedAt=2026-11-15T10:42:36+08:00 由 --raw 显式传入，无法独立核验原始抓取时刻；文件在工作区的 mtime 为 checkout 写入时间。可核验的是快照内容自洽：success=true、结构符合官方接口、lastUpdateTime=2026-11-15 10:19:44 与报告一致。",
+    "报告未出现 vote 数值，但 raw 快照中 vote 本身为空对象；若官方未来返回非空 vote，已验证仍不会映射为 support（注入反例通过），但真实接口的非空 vote 样本未获取。"
+  ]
+}

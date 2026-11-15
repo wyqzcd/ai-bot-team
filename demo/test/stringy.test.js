@@ -51,3 +51,9 @@ test('truncate 不超长时原样返回', () => {
   assert.equal(truncate('short', 10), 'short');
   assert.equal(truncate('', 5), '');
 });
+
+test('truncate limit 不大于省略号长度时按 limit 硬截断', () => {
+  assert.equal(truncate('abcdef', 2, '...'), 'ab');
+  assert.equal(truncate('abcdef', 3, '...'), 'abc');
+  assert.equal(truncate('abcdef', 0, '...'), '');
+});

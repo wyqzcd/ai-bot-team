@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>竞彩足球盘口看板 · 2026-11-15</title>
+<style>
+body { margin: 0; background: #f5f6f8; color: #1f2328; font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif; line-height: 1.6; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.6rem; margin: 0 0 8px; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+h3 { font-size: 1rem; margin: 18px 0 8px; }
+section { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+ul { margin: 8px 0; padding-left: 22px; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+dt { color: #57606a; }
+dd { margin: 0; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; }
+.empty { color: #8c959f; }
+.match { border-top: 1px solid #eaeef2; padding-top: 4px; }
+.match:first-child { border-top: none; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.note { color: #57606a; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>竞彩足球盘口看板 · 2026-11-15</h1>
+<section id="snapshot"><h2>数据快照</h2>
+<ul>
+<li>抓取时间 capturedAt：2026-11-15T02:42:36.914Z</li>
+<li>生成时间 generatedAt：2026-11-15T02:42:36.917Z</li>
+<li>官方赔率更新时间 oddsUpdatedAt：2026-11-15T10:19:44+08:00</li>
+<li>来源 source：<span class="mono">https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&amp;channel=c</span></li>
+<li>备注 note：本次报告来自 --live 实时抓取（官方 JSON 接口）；实时接口返回 totalCount=5，未提供未开售场次，本看板不推断</li>
+</ul></section>
+<section id="structure"><h2>结构性判断</h2>
+<ul>
+<li>是否全为整数一球盘：是</li>
+<li>已开售场次：5 场（整数盘：5 场，半盘：0 场）</li>
+<li>高置信场次：2 场</li>
+</ul>
+<ul><li>周日001 — RQSPF 让球客胜 60.10%</li><li>周日003 — RQSPF 让球主胜 60.15%</li></ul>
+<ul>
+<li>ambiguous 场次：0 场（无）</li>
+<li>无让球盘场次：0 场</li>
+<li>未开售（pending）：0 条</li>
+</ul></section>
+<section id="groups"><h2>五类分组</h2>
+<section id="group-win_cover" class="group"><h3>赢球赢盘（2 场）</h3><ul><li>周日002 日联赛杯 鹿岛鹿角 VS 横滨水手</li><li>周日004 日联赛杯 柏太阳神 VS 川崎前锋</li></ul></section><section id="group-win_no_cover" class="group"><h3>赢球赢不了盘（3 场）</h3><ul><li>周日001 日联赛杯 町田泽维 VS 神户胜利</li><li>周日003 日联赛杯 大阪樱花 VS 浦和红钻</li><li>周日005 荷乙 马斯特里 VS 维迪斯</li></ul></section><section id="group-lose_cover" class="group"><h3>输球赢盘（0 场）</h3><p class="empty">本组无场次</p><p class="empty">整数一球盘下，输 1 球为走盘（让球平），受让方输球不可能赢盘；真正的「输球赢盘」需要半盘。本批无半盘，该组恒为空，未硬凑场次、未虚构半盘。</p></section><section id="group-lose_no_cover" class="group"><h3>输球输盘（0 场）</h3><p class="empty">本组无场次</p></section>
+<section id="group-likely_draw" class="group"><h3>可能平局（1 场）</h3><ul><li>周日001 日联赛杯 町田泽维 VS 神户胜利（平局 28.78%）</li></ul></section>
+</section>
+<section id="matches"><h2>逐场明细</h2>
+<article class="match">
+<h3>周日001 · 日联赛杯</h3>
+<dl>
+<dt>开赛时间</dt><dd>2026-11-15T13:00:00+08:00</dd>
+<dt>对阵</dt><dd>町田泽维 VS 神户胜利</dd>
+<dt>让球</dt><dd>主让 1 球</dd>
+<dt>SPF 赔率</dt><dd>2.24 / 3.05 / 2.74</dd>
+<dt>RQSPF 赔率</dt><dd>5.32 / 3.75 / 1.46</dd>
+<dt>SPF 去水概率</dt><dd>39.19% / 28.78% / 32.04%</dd>
+<dt>RQSPF 去水概率</dt><dd>16.49% / 23.40% / 60.10%</dd>
+<dt>SPF 最大项</dt><dd>主胜（39.19%）</dd>
+<dt>分组</dt><dd>赢球赢不了盘</dd>
+<dt>判定理由</dt><dd>SPF 最大项为主胜，属让球方；整数一球盘下让球方赢盘概率 16.49% 低于走盘概率 23.40%，判定为赢球赢不了盘。</dd>
+<dt>高置信</dt><dd>是（RQSPF 让球客胜 60.10%）</dd>
+
+</dl>
+</article><article class="match">
+<h3>周日002 · 日联赛杯</h3>
+<dl>
+<dt>开赛时间</dt><dd>2026-11-15T14:00:00+08:00</dd>
+<dt>对阵</dt><dd>鹿岛鹿角 VS 横滨水手</dd>
+<dt>让球</dt><dd>主让 1 球</dd>
+<dt>SPF 赔率</dt><dd>1.55 / 3.90 / 4.20</dd>
+<dt>RQSPF 赔率</dt><dd>2.71 / 3.40 / 2.10</dd>
+<dt>SPF 去水概率</dt><dd>56.61% / 22.50% / 20.89%</dd>
+<dt>RQSPF 去水概率</dt><dd>32.39% / 25.82% / 41.80%</dd>
+<dt>SPF 最大项</dt><dd>主胜（56.61%）</dd>
+<dt>分组</dt><dd>赢球赢盘</dd>
+<dt>判定理由</dt><dd>SPF 最大项为主胜，属让球方；整数一球盘下让球方赢盘概率 32.39% 高于走盘概率 25.82%，判定为赢球赢盘。</dd>
+<dt>高置信</dt><dd>否</dd>
+
+</dl>
+</article><article class="match">
+<h3>周日003 · 日联赛杯</h3>
+<dl>
+<dt>开赛时间</dt><dd>2026-11-15T14:00:00+08:00</dd>
+<dt>对阵</dt><dd>大阪樱花 VS 浦和红钻</dd>
+<dt>让球</dt><dd>主受让 1 球</dd>
+<dt>SPF 赔率</dt><dd>2.45 / 3.50 / 2.25</dd>
+<dt>RQSPF 赔率</dt><dd>1.46 / 4.15 / 4.70</dd>
+<dt>SPF 去水概率</dt><dd>35.86% / 25.10% / 39.04%</dd>
+<dt>RQSPF 去水概率</dt><dd>60.15% / 21.16% / 18.69%</dd>
+<dt>SPF 最大项</dt><dd>客胜（39.04%）</dd>
+<dt>分组</dt><dd>赢球赢不了盘</dd>
+<dt>判定理由</dt><dd>SPF 最大项为客胜，属让球方；整数一球盘下让球方赢盘概率 18.69% 低于走盘概率 21.16%，判定为赢球赢不了盘。</dd>
+<dt>高置信</dt><dd>是（RQSPF 让球主胜 60.15%）</dd>
+
+</dl>
+</article><article class="match">
+<h3>周日004 · 日联赛杯</h3>
+<dl>
+<dt>开赛时间</dt><dd>2026-11-15T16:00:00+08:00</dd>
+<dt>对阵</dt><dd>柏太阳神 VS 川崎前锋</dd>
+<dt>让球</dt><dd>主让 1 球</dd>
+<dt>SPF 赔率</dt><dd>1.81 / 3.80 / 3.09</dd>
+<dt>RQSPF 赔率</dt><dd>3.46 / 3.72 / 1.72</dd>
+<dt>SPF 去水概率</dt><dd>48.49% / 23.10% / 28.41%</dd>
+<dt>RQSPF 去水概率</dt><dd>25.37% / 23.60% / 51.03%</dd>
+<dt>SPF 最大项</dt><dd>主胜（48.49%）</dd>
+<dt>分组</dt><dd>赢球赢盘</dd>
+<dt>判定理由</dt><dd>SPF 最大项为主胜，属让球方；整数一球盘下让球方赢盘概率 25.37% 高于走盘概率 23.60%，判定为赢球赢盘。</dd>
+<dt>高置信</dt><dd>否</dd>
+
+</dl>
+</article><article class="match">
+<h3>周日005 · 荷乙</h3>
+<dl>
+<dt>开赛时间</dt><dd>2026-11-15T21:30:00+08:00</dd>
+<dt>对阵</dt><dd>马斯特里 VS 维迪斯</dd>
+<dt>让球</dt><dd>主受让 1 球</dd>
+<dt>SPF 赔率</dt><dd>2.90 / 3.45 / 1.98</dd>
+<dt>RQSPF 赔率</dt><dd>1.62 / 3.70 / 3.98</dd>
+<dt>SPF 去水概率</dt><dd>30.26% / 25.43% / 44.31%</dd>
+<dt>RQSPF 去水概率</dt><dd>54.20% / 23.73% / 22.06%</dd>
+<dt>SPF 最大项</dt><dd>客胜（44.31%）</dd>
+<dt>分组</dt><dd>赢球赢不了盘</dd>
+<dt>判定理由</dt><dd>SPF 最大项为客胜，属让球方；整数一球盘下让球方赢盘概率 22.06% 低于走盘概率 23.73%，判定为赢球赢不了盘。</dd>
+<dt>高置信</dt><dd>否</dd>
+
+</dl>
+</article>
+</section>
+<section id="pending"><h2>未开售场次</h2><p>无</p></section>
+<section id="limits"><h2>口径限制</h2>
+<ul>
+<li>只有官方已开售场次才有赔率；未开售场次无赔率，本看板不推断、不补造。</li>
+<li>已定稿口径覆盖整数一球盘与半盘；整数 |h|≥2 的口径未定义，校验阶段直接拒绝。</li>
+<li>去水概率是赔率隐含概率，不含其它信息，不构成赛果预测。</li>
+<li>support 人气数据不是赔率概率，只原样展示，不参与任何计算、排序或分组。</li>
+<li>显示统一保留 2 位小数，各项相加不保证恰好等于 100%。</li>
+</ul></section>
+<section id="method"><h2>方法论</h2>
+<ul>
+<li>去水公式：p_i = (1/odds_i) / Σ(1/odds_j)。</li>
+<li>SPF 与 RQSPF 各自独立归一化，不混合计算。</li>
+<li>handicap 负=主队让球，正=主队受让；spf=[主胜,平,客胜]，rqspf=[让球主胜,让球平,让球客胜]。</li>
+<li>并列判定与大小比较使用未舍入值，容差 EPS = 1e-9。</li>
+<li>高置信：两市场所有去水概率的未舍入最大值 ≥ 0.60。</li>
+<li>页面百分比使用 (p * 100).toFixed(2) + "%"，赔率保留 2 位小数。</li>
+</ul></section>
+<section id="disclaimer"><h2>免责声明</h2>
+<p>本看板仅用于赔率数据整理与技术演示，不构成投注建议，也不保证任何赛果。未满 18 周岁禁止购彩。请理性对待，遵守当地法律法规。</p>
+</section>
+</main>
+</body>
+</html>

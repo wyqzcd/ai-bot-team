@@ -73,3 +73,19 @@ test('truncate limit 不大于省略号长度时按 limit 硬截断', () => {
   assert.equal(truncate('abcdef', 3, '...'), 'abc');
   assert.equal(truncate('abcdef', 0, '...'), '');
 });
+
+test('truncate 非法 limit（负数或 NaN）按 0 处理', () => {
+  assert.equal(truncate('abcdef', NaN), '');
+  assert.equal(truncate('abcdef', -1), '');
+  assert.equal(truncate('abcdef', -100), '');
+});
+
+test('truncate 非法 limit 自定义省略号时仍返回空串', () => {
+  assert.equal(truncate('abcdef', NaN, '…'), '');
+  assert.equal(truncate('abcdef', -1, '…'), '');
+});
+
+test('truncate 空输入搭配非法 limit 仍为空串', () => {
+  assert.equal(truncate('', NaN), '');
+  assert.equal(truncate('', -1), '');
+});

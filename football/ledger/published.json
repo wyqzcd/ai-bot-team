@@ -1,9 +1,13 @@
 {
-  "publishedAt": "2026-11-24T15:00:00Z",
+  "publishedAt": "2026-11-24T14:20:00Z",
   "report": "../reports/2026-11-24.html",
   "backtest-v3": {
     "entries": 25114,
     "lastHash": "15c685f1b7b27381"
+  },
+  "backtest-elo": {
+    "entries": 7200,
+    "lastHash": "4f5c0ea460ed588d"
   },
   "backtest": {
     "entries": 25114,
@@ -16,5 +20,9 @@
   "live": {
     "entries": 0,
     "lastHash": null
+  },
+  "ucl-candidate": {
+    "entries": 7,
+    "lastHash": "866c42019d32cdce"
   }
 }

@@ -54,6 +54,7 @@ export function renderReport({ generatedAt, gates, registry, ledgers, model, jcz
   const curve = backtest ? coverageCurve(backtest, { mode: 'backtest', from: holdoutFrom }) : [];
   const live = ledgers.find((l) => l.role === 'live')?.entries ?? [];
   const liveFold = foldLedger(live);
+  const ucl = foldLedger(ledgers.find((l) => l.role === 'candidate')?.entries ?? []).filter((x) => x.prediction).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : a.prediction.kickoff > b.prediction.kickoff ? 1 : a.id < b.id ? -1 : 1));
   const upcoming = liveFold.filter((x) => x.prediction && !x.result).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : 1));
   const liveStats = computeStats(live, { mode: 'live' });
   const liveReview = review(live, { mode: 'live' });
@@ -111,6 +112,13 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
       p.probs.map(pct).join(' / '), p.lam.join(' / '), p.top3.map((s) => esc(s[0])).join(', '), p.seq,
     ];
   }))}</div>
+
+<h2>候选：欧冠方向（不作结论）</h2>
+<div class="card muted">Elo 泊松模型（R-012/R-013 在五大联赛联赛内校准），没有任何欧冠样本回测；Elo 快照约 3 个月前，伤停首发未进模型。只作为候选记录（R-014），开赛即锁定。</div>
+<div class="scroll">${table(['开赛 (北京时间)', '对阵', '方向', 'conf', '胜/平/负', 'λ', '赛果', '#'], ucl.map(({ prediction: p, result: r }) => [
+    esc(new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')), `${esc(p.home)} vs ${esc(p.away)}`, PICK_LABEL[p.pick], pct(p.conf),
+    p.probs.map(pct).join(' / '), p.lam.join(' / '), r ? `${r.ft[0]}-${r.ft[1]}` : '<span class="muted">未赛</span>', p.seq,
+  ]))}</div>
 
 <h2>实盘战绩</h2>
 <div class="card">已结算 ${liveStats.n} 场 · 方向命中 ${pct(liveStats.direction_hit.rate)} · 同样本市场热门 ${pct(liveStats.baselines.market_fav.rate)}（n=${liveStats.baselines.market_fav.n}） · 比分 TOP3 ${pct(liveStats.score_top3_hit.rate)}

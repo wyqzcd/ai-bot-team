@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { fitPoisson, lambdas, scoreMatrix, summarizeMatrix } from '../../football/src/poisson.mjs';
 import { blendedLambdas, fitModel } from '../../football/src/walkforward.mjs';
+import { fitEloPoisson, loadEloModel, predictElo } from '../../football/src/elo.mjs';
 import { GENESIS, foldLedger, hashEntry, readLedger, seal } from '../../football/src/ledger.mjs';
 import { computeStats, attributeMiss, outcomeOf } from '../../football/src/metrics.mjs';
 import { checkRegistry, effectiveStatus } from '../../football/src/rules.mjs';
@@ -123,6 +124,27 @@ test('射正评分同样不用 asOf 之后的比赛；没有射正数据时退�
   const noShots = fitModel(syntheticHistory(), cut, P, 0.5);
   assert.equal(noShots.ok, true);
   assert.equal(noShots.shots, null);
+});
+
+// ---------- Elo 泊松（跨联赛候选） ----------
+test('Elo 泊松：Elo 越高预期进球越多；同分时只剩主场优势；概率归一', () => {
+  const params = loadEloModel();
+  assert.ok(params.beta > 0);
+  assert.equal(params.trainTo, '2024-06-30', '参数只用训练段拟合');
+  const even = predictElo(params, 1800, 1800);
+  assert.ok(even.probs.h > even.probs.a, '同分时主队略占优（主场优势）');
+  const strong = predictElo(params, 2000, 1700);
+  assert.ok(strong.lam.home > even.lam.home && strong.lam.away < even.lam.away);
+  assert.ok(Math.abs(strong.probs.h + strong.probs.d + strong.probs.a - 1) < 1e-12);
+});
+
+test('Elo 泊松：拟合只用训练窗口内的比赛', () => {
+  const base = syntheticHistory({ rounds: 40 }).map((m, i) => ({ ...m, elo: { h: 1700 + (i % 7) * 20, a: 1750 - (i % 5) * 20 } }));
+  const window = { from: '2025-01-01', to: '2026-12-31', rhoGrid: [0] };
+  const inWindow = fitEloPoisson(base, window);
+  assert.ok(inWindow.n >= 500 && base.some((m) => m.date > window.to), '窗口外确实有比赛');
+  const poisoned = base.map((m) => (m.date > window.to ? { ...m, ft: { h: 9, a: 0 } } : m));
+  assert.deepEqual(fitEloPoisson(poisoned, window), inWindow);
 });
 
 // ---------- 台账与哈希链 ----------

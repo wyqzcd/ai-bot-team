@@ -1,0 +1,191 @@
+{
+  "2049625": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Real Madrid vs PSV",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Real Madrid",
+        "priorMatches": 4,
+        "regulars": 8,
+        "missingRegulars": null
+      },
+      {
+        "team": "PSV",
+        "priorMatches": 4,
+        "regulars": 11,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049626": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Man City vs Napoli",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Man City",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      },
+      {
+        "team": "Napoli",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049627": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Arsenal vs B. Dortmund",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Arsenal",
+        "priorMatches": 4,
+        "regulars": 8,
+        "missingRegulars": null
+      },
+      {
+        "team": "B. Dortmund",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049628": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Feyenoord vs Porto",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Feyenoord",
+        "priorMatches": 4,
+        "regulars": 11,
+        "missingRegulars": null
+      },
+      {
+        "team": "Porto",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049629": {
+    "kickoff": "2026-11-24T17:45:00Z",
+    "match": "Bodø/Glimt vs LASK",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Bodø/Glimt",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      },
+      {
+        "team": "LASK",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049630": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Leipzig vs Lens",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Leipzig",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      },
+      {
+        "team": "Lens",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049631": {
+    "kickoff": "2026-11-24T17:45:00Z",
+    "match": "Galatasaray vs Aston Villa",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Galatasaray",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      },
+      {
+        "team": "Aston Villa",
+        "priorMatches": 4,
+        "regulars": 8,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049632": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "S. Bratislava vs Real Betis",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "S. Bratislava",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      },
+      {
+        "team": "Real Betis",
+        "priorMatches": 4,
+        "regulars": 7,
+        "missingRegulars": null
+      }
+    ]
+  },
+  "2049633": {
+    "kickoff": "2026-11-24T20:00:00Z",
+    "match": "Como vs AEK Athens",
+    "checkedAt": "2026-11-24T14:19:16Z",
+    "lineupStatus": "NOT_AVAILABLE",
+    "published": false,
+    "sides": [
+      {
+        "team": "Como",
+        "priorMatches": 4,
+        "regulars": 10,
+        "missingRegulars": null
+      },
+      {
+        "team": "AEK Athens",
+        "priorMatches": 4,
+        "regulars": 9,
+        "missingRegulars": null
+      }
+    ]
+  }
+}

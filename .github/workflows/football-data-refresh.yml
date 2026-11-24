@@ -1,5 +1,5 @@
 # 样本库每周刷新：每周一 03:17 UTC 下载原始数据，用 build-dataset 重建 big5.csv / elo-latest.csv / manifest.json。
-# 有变化才开 PR 交人工审（样本库属于低风险目录，但同批会更新发布锚点等高风险文件时仍需人工 review）。
+# 有变化才开 PR；门禁、测试、复现验证全过且只改样本库文件时，走例行数据通道自动合并，否则留待人工 review。
 # 不刷新的后果：样本库超过 120 天 G8 阻断、欧冠候选因 Elo 过旧停出预测——闭环会自己停下来。
 # 回测窗口上界固定（BACKTEST_TO），刷新样本库不会让现有回测台账"缺场"；要把新比赛纳入回测，需另行生成新版本台账。
 name: 足球样本库刷新
@@ -12,12 +12,15 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -35,10 +38,14 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain football/data)" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; else echo "样本库无变化，结束。"; echo "yes=false" >> "$GITHUB_OUTPUT"; fi
 
-      - name: 门禁与测试
+      - name: 门禁、测试、复现验证
         if: steps.changed.outputs.yes == 'true'
         run: |
           node football/bin/gates.mjs
+          # 复现验证：新样本库下回测台账必须逐字节不变（上游若改写了历史比赛，这里会失败，转人工）
+          node football/bin/backtest.mjs
+          node football/bin/elo-backtest.mjs
+          git diff --exit-code --stat -- football/ledger football/data/elo-model.json
           (cd demo && npm test)
           (cd football && npm test)
 
@@ -57,3 +64,21 @@ jobs:
           BODY="每周样本库刷新：原始文件 sha256 $(jq -r '.source.sha256' football/data/manifest.json)，截至 $(jq -r '.source.to' football/data/manifest.json)。G8 数据质量与测试已通过。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY" --label bot-authored \
             || gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY"
+
+      # 例行数据通道（只追加的数据 PR 自动合并；代码/工作流/规则改动永远走人工 review）。
+      # 检查脚本必须取 main 上的版本运行，PR 改不了它。紧急关闭：仓库变量 ROUTINE_AUTO_MERGE=false。
+      - name: 例行数据自动合并
+        if: steps.changed.outputs.yes == 'true' && vars.ROUTINE_AUTO_MERGE != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+        run: |
+          git fetch origin main
+          git show origin/main:scripts/routine-merge-check.mjs > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
+          if [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base origin/main; then
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            gh pr merge "$BRANCH" --squash --delete-branch
+            # 默认令牌推到 main 不会触发其他工作流，这里显式触发发布页重新部署
+            gh workflow run football-pages.yml --ref main
+          else
+            echo "不满足例行数据自动合并条件，PR 留待人工 review。"
+          fi

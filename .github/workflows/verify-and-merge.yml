@@ -12,6 +12,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 
 jobs:
   verify:
@@ -85,7 +86,9 @@ jobs:
           BASE="${{ github.event.pull_request.base.ref }}"
           git fetch origin "$BASE" --depth=1
           git show "origin/$BASE:config/trust.json" > trust-base.json
-          echo "已从 $BASE 读取放权配置"
+          # 评分脚本同样只用 base 版本：PR 改 trust-score.mjs 不能给自己刷分
+          git show "origin/$BASE:scripts/trust-score.mjs" > "$RUNNER_TEMP/trust-score.mjs"
+          echo "已从 $BASE 读取放权配置与评分脚本"
 
       - name: 计算信任评分并评论
         env:
@@ -93,12 +96,12 @@ jobs:
         run: |
           VERIFIED=${{ steps.qa.outcome == 'success' && 'true' || 'false' }}
           CI=${{ (steps.tests.outcome == 'success' && steps.football_tests.outcome == 'success' && steps.football_gates.outcome == 'success') && 'success' || 'failure' }}
-          node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" \
             --format markdown > score-comment.md
-          node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" > result.json
@@ -111,11 +114,11 @@ jobs:
           path: result.json
 
       # 测试与门禁前面用 continue-on-error 是为了评分照常计算、评论照常发出；
-      # 这里收口：任一失败，verify 检查本身必须变红，不能出现"测试挂了但 CI 显示绿色"。
+      # 这里收口：测试、门禁、复现验证任一失败，verify 检查本身必须变红，不能出现"测试挂了但 CI 显示绿色"。
       - name: 测试或门禁失败则标红
-        if: ${{ steps.tests.outcome != 'success' || steps.football_tests.outcome != 'success' || steps.football_gates.outcome != 'success' }}
+        if: ${{ steps.tests.outcome != 'success' || steps.football_tests.outcome != 'success' || steps.football_gates.outcome != 'success' || steps.qa.outcome != 'success' }}
         run: |
-          echo "demo 测试：${{ steps.tests.outcome }}；足球测试：${{ steps.football_tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}"
+          echo "demo 测试：${{ steps.tests.outcome }}；足球测试：${{ steps.football_tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}；复现验证：${{ steps.qa.outcome }}"
           exit 1
 
   merge:
@@ -124,6 +127,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -133,8 +138,10 @@ jobs:
       - name: 取 base 分支放权配置
         run: |
           BASE="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "$BASE" --depth=1
+          git fetch origin "$BASE"
           git show "origin/$BASE:config/trust.json" > trust-base.json
+          # base 上还没有检查脚本时（首次引入前）不走例行数据通道
+          git show "origin/$BASE:scripts/routine-merge-check.mjs" > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
 
       - name: 决策并执行
         env:
@@ -148,6 +155,14 @@ jobs:
 
           if [ "$BOT_AUTHORED" != "true" ]; then
             echo "非 bot PR，跳过自动合并（只允许带 bot-authored 标签的 PR 走自动通道）。"
+            exit 0
+          fi
+
+          # 例行数据通道：只追加的数据 PR（verify 已全绿：测试 + 8 道门禁 + 复现验证）直接合并。紧急关闭：ROUTINE_AUTO_MERGE=false
+          if [ "${{ vars.ROUTINE_AUTO_MERGE }}" != "false" ] && [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base "origin/${{ github.event.pull_request.base.ref }}"; then
+            echo "例行数据 PR，自动合并…"
+            gh pr merge "$PR" --squash --delete-branch
+            gh workflow run football-pages.yml --ref "${{ github.event.pull_request.base.ref }}" || true
             exit 0
           fi
 

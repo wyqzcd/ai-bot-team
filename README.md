@@ -97,6 +97,8 @@ GitHub 仓库配置：
 | L2 低风险自动 | `dryRun: false` | 仅 docs/tests 等低风险目录 + CI 全绿的 PR 自动合并 |
 | L3 放量 | 上调 `levels` 里 L2/L3 的 `minScore` 并逐步放宽 `directories` | fix/test/chore 类、评分达标的中风险改动自动合并 |
 
+**例行数据通道**（与上面的评分通道并行）：只改台账、赛程快照、发布页、样本库的 bot PR，CI 全绿且对照 main 证明台账只追加不改写时直接自动合并，不看评分，配置见 `config/trust.json` 的 `routineData`，细节见 `football/README.md`。紧急关闭：仓库变量 `ROUTINE_AUTO_MERGE=false`。
+
 任何阶段你都可以给 PR 打 `bot-review-needed` 标签强制转人工。自动合并只作用于带 `bot-authored` 标签的 PR，你自己的 PR 永不自动合并。
 
 ## 信任评分机制（混合放权）

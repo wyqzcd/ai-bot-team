@@ -3,7 +3,7 @@
 参考 [MattCheng23/football-analysis](https://github.com/MattCheng23/football-analysis) 的**流程设计**，零依赖 Node ESM（Node ≥ 18）重新实现。代码与数据都是自己的，没有搬运原仓库。和原仓库一样，这里的价值在流程，不在命中率。
 
 ```
-数据采集 → 泊松建模 → 7 道机械门禁 → 发布 → 赛后归因 → 规则登记/撤回 → 回到建模
+数据采集 → 泊松建模 → 8 道机械门禁 → 发布 → 赛后归因 → 规则登记/撤回 → 回到建模
 ```
 
 ## 先说结论：66% 是怎么来的
@@ -71,7 +71,7 @@ node football/bin/result.mjs --id "E0|2026-11-28|Arsenal|Chelsea" --ft 2-1 --ht 
 node football/bin/retract.mjs --seq 12 --reason "<原因>"
 
 # 门禁与发布
-node football/bin/gates.mjs                # 7 道门禁
+node football/bin/gates.mjs                # 8 道门禁
 node football/bin/publish.mjs [--dry-run]  # 门禁全过才写发布页 + 更新锚点
 ```
 
@@ -174,7 +174,7 @@ Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
 
 台账每条带 `prev`/`hash` 组成哈希链。改写、删除、插入任意一条都会被 G2 发现。就算整条链重新算 hash，也改不动 `published.json` 锚定的已发布前缀。
 
-## 7 道机械门禁
+## 8 道机械门禁
 
 | 门禁 | 检查内容 |
 |---|---|
@@ -185,6 +185,7 @@ Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
 | G5 覆盖率 | 回测不许挑场（样本库每场都要有预测和赛果）；实盘开赛超 72h 必须录赛果 |
 | G6 规则登记 | active 三要素齐全；撤回必须留痕 |
 | G7 复算一致 | active 与撤回规则的数字现场复算 |
+| G8 数据质量 | 样本库与 `data/manifest.json` 指纹一致（不许手改）；同联赛去标点后同名的不同写法 = 队名分裂；行级校验（重复、比分、赔率、射正、Elo）；样本库超 30 天提示、超 120 天阻断 |
 
 ## 局限
 

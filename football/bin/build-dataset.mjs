@@ -3,9 +3,11 @@
  * 从原始全量 CSV（xgabora/Club-Football-Match-Data-2000-2025 的 data/Matches.csv）
  * 裁出五大联赛样本库 football/data/big5.csv。只保留建模与复算需要的列。
  *
- * 用法：node football/bin/build-dataset.mjs --raw <Matches.csv> [--from 2017-07-01] [--out football/data/big5.csv]
+ * 用法：node football/bin/build-dataset.mjs --raw <Matches.csv> [--from 2017-07-01] [--source-url <原始文件地址>]
+ * 同时写 data/manifest.json：原始文件 sha256 + 产出文件 sha256，供 G8 校验（原始文件不入库，凭指纹确认版本）。
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { MANIFEST_FILE, sha256File } from '../src/quality.mjs';
 import path from 'node:path';
 import { parseCsv, toCsv } from '../src/csv.mjs';
 import { DATASET_COLUMNS, DEFAULT_DATASET, LEAGUES, canonicalTeam } from '../src/dataset.mjs';
@@ -22,6 +24,7 @@ if (!raw) {
 }
 const from = arg('--from', '2017-07-01');
 const out = arg('--out', DEFAULT_DATASET);
+const sourceUrl = arg('--source-url', 'https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data-2000-2025/main/data/Matches.csv');
 
 const intText = (value) => (value === '' ? '' : String(Math.round(Number(value))));
 const rows = parseCsv(readFileSync(raw, 'utf8'))
@@ -63,3 +66,11 @@ for (const row of parseCsv(readFileSync(raw, 'utf8'))) {
 const eloOut = path.join(path.dirname(out), 'elo-latest.csv');
 writeFileSync(eloOut, toCsv(['team', 'division', 'date', 'elo'], [...latest.values()].sort((a, b) => (a.team < b.team ? -1 : 1))));
 console.log(JSON.stringify({ out, rows: rows.length, from, to: rows.at(-1)?.date }));
+
+if (out === DEFAULT_DATASET) {
+  const manifest = {
+    source: { url: sourceUrl, sha256: sha256File(raw), rows: rows.length, from, to: rows.at(-1)?.date ?? null },
+    outputs: { 'big5.csv': sha256File(out), 'elo-latest.csv': sha256File(eloOut) },
+  };
+  writeFileSync(MANIFEST_FILE, `${JSON.stringify(manifest, null, 2)}\n`);
+}

@@ -1,5 +1,5 @@
 /**
- * 7 道机械门禁：任一 ERROR 即阻断发布（publish.mjs 不写任何文件，退出码 1）。
+ * 8 道机械门禁：任一 ERROR 即阻断发布（publish.mjs 不写任何文件，退出码 1）。
  *
  *   G1 结构完整性  每条字段齐全、类型正确、字段序与规范一致、seq 从 1 连续
  *   G2 哈希链      prev/hash 逐条可复算；已发布锚点（published.json）记录的前缀不得被改写
@@ -8,9 +8,11 @@
  *   G5 覆盖率      回测：样本库窗口内每场都有预测和赛果（不许挑场）；实盘：开赛超 72h 仍无赛果即阻断
  *   G6 规则登记    active 规则三要素齐全；撤回必须留痕；候选规则只警告
  *   G7 复算一致    active 规则的 claim 现场复算，rate 误差 ≤ 0.0005 且 n 一致
+ *   G8 数据质量    样本库指纹、队名分裂、行级校验、新鲜度（见 quality.mjs）
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { FIELD_ORDER, GENESIS, PICKS, foldLedger, hashEntry } from './ledger.mjs';
+import { checkDataQuality } from './quality.mjs';
 import { checkRegistry } from './rules.mjs';
 
 const MAX_LISTED = 20;
@@ -234,7 +236,15 @@ export function readAnchor(file) {
  * @param {object} input.anchors label → {entries,lastHash}
  * @param {string} input.now
  */
-export function runGates({ ledgers, registry, anchors = {}, now }) {
+export function g8DataQuality(options) {
+  const g = gate('G8', '数据质量');
+  const report = checkDataQuality(options);
+  report.errors.forEach(g.error);
+  report.warnings.forEach(g.warn);
+  return { ...g.done(), errorCount: report.errorCount };
+}
+
+export function runGates({ ledgers, registry, anchors = {}, now, dataQuality = {} }) {
   const merge = (id, name, parts) => {
     const errors = parts.flatMap((p) => p.errors);
     return { id, name, ok: parts.every((p) => p.ok), errorCount: parts.reduce((s, p) => s + p.errorCount, 0), errors: errors.slice(0, MAX_LISTED), warnings: parts.flatMap((p) => p.warnings).slice(0, MAX_LISTED) };
@@ -247,6 +257,7 @@ export function runGates({ ledgers, registry, anchors = {}, now }) {
     merge('G5', '覆盖率', ledgers.map((l) => g5Coverage(l.entries, l.label, { expectedIds: l.expectedIds ?? null, now }))),
     g6Registry(registry),
     g7Recompute(registry),
+    g8DataQuality({ ...dataQuality, now }),
   ];
   return { ok: results.every((r) => r.ok), gates: results };
 }

@@ -335,10 +335,10 @@ test('实盘：赛果要等完场、不可重复；撤回必须写原因', () =>
 });
 
 // ---------- 仓库真实台账：可复算 ----------
-test('仓库提交的回测台账 + 登记表通过全部 7 道门禁', () => {
+test('仓库提交的台账、登记表、样本库通过全部 8 道门禁', () => {
   const report = runAllGates({ now: '2026-11-24T13:00:00Z' });
   for (const g of report.gates) assert.equal(g.ok, true, `${g.id} ${g.name}: ${g.errors.join('; ')}`);
-  assert.equal(report.gates.length, 7);
+  assert.equal(report.gates.length, 8);
 });
 
 test('stats.mjs --rule R-007 一键复算并与登记值一致', () => {

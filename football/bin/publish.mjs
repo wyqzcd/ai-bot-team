@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 发布：先跑 7 道门禁，任一失败 → 退出 1、不写任何文件。
+ * 发布：先跑全部机械门禁，任一失败 → 退出 1、不写任何文件。
  * 通过 → 写 football/reports/<YYYY-MM-DD>.html，并更新发布锚点 ledger/published.json
  * （记录每本台账已发布的条数与末条 hash；之后任何改写已发布前缀的行为都会被 G2 拦下）。
  *

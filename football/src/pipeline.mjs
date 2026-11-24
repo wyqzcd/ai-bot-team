@@ -31,7 +31,7 @@ export function gateInputs({ paths = PATHS, frozen = FROZEN_LEDGERS, now, datase
   if (paths.uclLedger && existsSync(paths.uclLedger)) {
     ledgers.push({ label: ledgerLabel(paths.uclLedger), role: 'candidate', file: paths.uclLedger, entries: readLedger(paths.uclLedger) });
   }
-  return { ledgers, registry: loadRegistry(paths.registry), anchors: readAnchor(paths.anchors), now };
+  return { ledgers, registry: loadRegistry(paths.registry), anchors: readAnchor(paths.anchors), now, dataQuality: paths.dataQuality ?? {} };
 }
 
 export function runAllGates(options = {}) {

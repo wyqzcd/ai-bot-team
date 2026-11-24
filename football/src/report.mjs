@@ -89,7 +89,7 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
 <h1>足球泊松台账 · 发布页</h1>
 <div class="muted">生成于 ${esc(generatedAt)} · 模型 ${esc(model)} · 五大联赛（${Object.values(LEAGUES).join(' / ')}）</div>
 
-<div class="card"><b>7 道机械门禁</b>：${gates.ok ? '<span class="ok">全部通过</span>' : '<span class="bad">未通过</span>'}<ul class="gates">${gateList}</ul></div>
+<div class="card"><b>${gates.gates.length} 道机械门禁</b>：${gates.ok ? '<span class="ok">全部通过</span>' : '<span class="bad">未通过</span>'}<ul class="gates">${gateList}</ul></div>
 
 <div class="card"><b>怎么读这些数字</b>：方向 = 胜/平/负三选一。每个命中率都必须和<b>样本量 n、覆盖率、同样本的市场热门命中</b>一起看。
 五大联赛赛前赔率热门全样本只命中约 53.6%；任何高于此的数字都只是"挑了更一边倒的比赛"，覆盖率会相应下降。</div>

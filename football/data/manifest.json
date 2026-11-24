@@ -1,0 +1,13 @@
+{
+  "source": {
+    "url": "https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data-2000-2025/main/data/Matches.csv",
+    "sha256": "ef224cf2c252f07a842b3bcfd4ba5c718c25cedd8937ffa174a74b86b5ba4221",
+    "rows": 16209,
+    "from": "2017-07-01",
+    "to": "2026-09-03"
+  },
+  "outputs": {
+    "big5.csv": "a5c194df12d3467680de80b828edc1c5504d9283abc87483c91d96421715e18c",
+    "elo-latest.csv": "3cb337021c9ac113594898a9fbb80c016854b31a1290b61168f03dcb0d315a2c"
+  }
+}

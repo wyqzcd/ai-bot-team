@@ -86,8 +86,11 @@ jobs:
           BASE="${{ github.event.pull_request.base.ref }}"
           git fetch origin "$BASE" --depth=1
           git show "origin/$BASE:config/trust.json" > trust-base.json
-          # 评分脚本同样只用 base 版本：PR 改 trust-score.mjs 不能给自己刷分
-          git show "origin/$BASE:scripts/trust-score.mjs" > "$RUNNER_TEMP/trust-score.mjs"
+          # 评分脚本与任务类型路由同样只用 base 版本：PR 改 trust-score.mjs / routing.json 不能给自己刷分。
+          # 保持 scripts/ 与 config/ 的相对位置（脚本按 ../config/routing.json 读路由）。
+          mkdir -p "$RUNNER_TEMP/trust/scripts" "$RUNNER_TEMP/trust/config"
+          git show "origin/$BASE:scripts/trust-score.mjs" > "$RUNNER_TEMP/trust/scripts/trust-score.mjs"
+          git show "origin/$BASE:config/routing.json" > "$RUNNER_TEMP/trust/config/routing.json"
           echo "已从 $BASE 读取放权配置与评分脚本"
 
       - name: 计算信任评分并评论
@@ -96,12 +99,12 @@ jobs:
         run: |
           VERIFIED=${{ steps.qa.outcome == 'success' && 'true' || 'false' }}
           CI=${{ (steps.tests.outcome == 'success' && steps.football_tests.outcome == 'success' && steps.football_gates.outcome == 'success') && 'success' || 'failure' }}
-          node "$RUNNER_TEMP/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust/scripts/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" \
             --format markdown > score-comment.md
-          node "$RUNNER_TEMP/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust/scripts/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" > result.json

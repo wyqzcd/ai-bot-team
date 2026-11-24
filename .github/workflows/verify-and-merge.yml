@@ -37,7 +37,7 @@ jobs:
         continue-on-error: true
         run: npm test
 
-      # 足球台账 8 道机械门禁，用 CI 运行时的真实时间（单测里的门禁用固定时间，抓不到"赛果逾期"之类的问题）
+      # 足球台账 7 道机械门禁，用 CI 运行时的真实时间（单测里的门禁用固定时间，抓不到"赛果逾期"之类的问题）
       - name: 足球台账门禁（真实时间）
         id: football_gates
         continue-on-error: true

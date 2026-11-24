@@ -1,6 +1,6 @@
 # 足球比赛日定时闭环：每天 12:07 UTC（北京时间 20:07）
 #   1. 录前一天欧冠赛果（UEFA 官方）     2. 抓当天欧冠赛程并出候选预测（开赛前写入，开赛即锁定）
-#   3. 8 道机械门禁 → 发布页 + 发布锚点  4. 开 PR（带 bot-authored 标签）交人工审
+#   3. 7 道机械门禁 → 发布页 + 发布锚点  4. 开 PR（带 bot-authored 标签）交人工审
 # 台账无变化（当天没有欧冠、前一天也没有）就什么都不做。
 # 台账是哈希链，只能串行追加：若上一个比赛日 PR 还没合并，就接在它的分支上继续追加、更新同一个 PR（滚动 PR），
 # 不会出现两个 PR 同时追加导致冲突，也保证前一天的预测能被录上赛果。
@@ -105,7 +105,7 @@ jobs:
             gh pr comment "$OPEN" --body "已追加 ${{ steps.d.outputs.today }} 比赛日：录入 ${{ steps.d.outputs.yesterday }} 赛果、写入当天候选预测，门禁通过。" || true
             exit 0
           fi
-          BODY="自动比赛日闭环：录入 ${{ steps.d.outputs.yesterday }} 欧冠赛果、写入 ${{ steps.d.outputs.today }} 欧冠候选预测（开赛前已推送，推送时间即赛前证据）、8 道门禁通过后更新发布页与发布锚点。
+          BODY="自动比赛日闭环：录入 ${{ steps.d.outputs.yesterday }} 欧冠赛果、写入 ${{ steps.d.outputs.today }} 欧冠候选预测（开赛前已推送，推送时间即赛前证据）、7 道门禁通过后更新发布页与发布锚点。
 
           改动包含发布锚点，需要人工 review 后合并；合并后发布页自动上线。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): ${{ steps.d.outputs.today }} 比赛日闭环" --body "$BODY" --label bot-authored \

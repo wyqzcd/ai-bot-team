@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 跑全部机械门禁（G1~G8）。全部通过退出 0；任一 ERROR 退出 1。
+ * 跑全部机械门禁（G1~G7）。全部通过退出 0；任一 ERROR 退出 1。
  * 用法：node football/bin/gates.mjs [--json]
  */
 import { runAllGates } from '../src/pipeline.mjs';

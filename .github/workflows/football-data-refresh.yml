@@ -1,6 +1,6 @@
 # 样本库每周刷新：每周一 03:17 UTC 下载原始数据，用 build-dataset 重建 big5.csv / elo-latest.csv / manifest.json。
 # 有变化才开 PR 交人工审（样本库属于低风险目录，但同批会更新发布锚点等高风险文件时仍需人工 review）。
-# 不刷新的后果：样本库超过 120 天 G8 阻断、欧冠候选因 Elo 过旧停出预测——闭环会自己停下来。
+# 不刷新的后果：样本库超过 120 天 G7 阻断、欧冠候选因 Elo 过旧停出预测——闭环会自己停下来。
 # 回测窗口上界固定（BACKTEST_TO），刷新样本库不会让现有回测台账"缺场"；要把新比赛纳入回测，需另行生成新版本台账。
 name: 足球样本库刷新
 
@@ -54,6 +54,6 @@ jobs:
           git add football/data
           git commit -m "chore(football): 刷新样本库（$(jq -r '.source.to' football/data/manifest.json)）"
           git push origin "$BRANCH"
-          BODY="每周样本库刷新：原始文件 sha256 $(jq -r '.source.sha256' football/data/manifest.json)，截至 $(jq -r '.source.to' football/data/manifest.json)。G8 数据质量与测试已通过。"
+          BODY="每周样本库刷新：原始文件 sha256 $(jq -r '.source.sha256' football/data/manifest.json)，截至 $(jq -r '.source.to' football/data/manifest.json)。G7 防呆与测试已通过。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY" --label bot-authored \
             || gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY"

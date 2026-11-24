@@ -4,7 +4,7 @@
  * 裁出五大联赛样本库 football/data/big5.csv。只保留建模与复算需要的列。
  *
  * 用法：node football/bin/build-dataset.mjs --raw <Matches.csv> [--from 2017-07-01] [--source-url <原始文件地址>]
- * 同时写 data/manifest.json：原始文件 sha256 + 产出文件 sha256，供 G8 校验（原始文件不入库，凭指纹确认版本）。
+ * 同时写 data/manifest.json：原始文件 sha256 + 产出文件 sha256，供 G7 防呆校验（原始文件不入库，凭指纹确认版本）。
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { MANIFEST_FILE, sha256File } from '../src/quality.mjs';

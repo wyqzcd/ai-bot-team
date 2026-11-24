@@ -3,7 +3,7 @@
 参考 [MattCheng23/football-analysis](https://github.com/MattCheng23/football-analysis) 的**流程设计**，零依赖 Node ESM（Node ≥ 18）重新实现。代码与数据都是自己的，没有搬运原仓库。和原仓库一样，这里的价值在流程，不在命中率。
 
 ```
-数据采集 → 泊松建模 → 8 道机械门禁 → 发布 → 赛后归因 → 规则登记/撤回 → 回到建模
+数据采集 → 泊松建模 → 7 道机械门禁 → 发布 → 赛后归因 → 规则登记/撤回 → 回到建模
 ```
 
 ## 先说结论：66% 是怎么来的
@@ -35,7 +35,7 @@ football/
 │   ├── big5.csv             样本库：五大联赛 2017-07 ~ 2026-09 赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
 │   ├── elo-latest.csv       全联赛球队最新 ClubElo 快照（欧冠候选用）
 │   ├── elo-model.json       Elo 泊松模型参数（只用训练段拟合）
-│   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G8 校验）
+│   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G7 防呆校验）
 │   ├── jczq-teams.json      竞彩中文队名 → 样本库队名对照表
 │   └── uefa-teams.json      UEFA 球队编号 → Elo 快照队名对照表
 ├── fixtures/ucl/            UEFA 官方赛程/赛果精简快照（赛前证据，不覆盖）
@@ -63,7 +63,7 @@ football/
 | `src/elo.mjs` | Elo 泊松跨联赛候选模型 |
 | `src/ledger.mjs` | 台账条目、哈希链、折叠（撤回口径） |
 | `src/metrics.mjs` `src/tiers.mjs` | 复算口（命中率 + 同样本基线）、赛后归因、档位 |
-| `src/rules.mjs` `src/gates.mjs` `src/quality.mjs` | 规则登记与锚点、8 道门禁、数据质量 |
+| `src/rules.mjs` `src/gates.mjs` `src/quality.mjs` | 规则登记与锚点、7 道门禁、数据质量 |
 | `src/live.mjs` `src/jczq.mjs` `src/ucl.mjs` | 实盘流程、竞彩接入、欧冠场次口径 |
 | `src/report.mjs` `src/pipeline.mjs` `src/config.mjs` | 发布页、门禁输入组装、路径与口径常量 |
 
@@ -102,7 +102,7 @@ NODE_USE_ENV_PROXY=1 node football/bin/ucl-lineups.mjs --date 2026-11-24   # 首
 NODE_USE_ENV_PROXY=1 node football/bin/ucl-results.mjs --date 2026-11-24   # 赛后录比分、算命中
 
 # 门禁与发布
-node football/bin/gates.mjs                # 8 道门禁
+node football/bin/gates.mjs                # 7 道门禁
 node football/bin/publish.mjs [--dry-run]  # 门禁全过才写发布页 + 更新锚点
 ```
 
@@ -215,31 +215,32 @@ Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
 | 录赛果 | 拒绝 | 开赛 105 分钟后允许，只能录一次 |
 | 撤回 | 原预测作废，不计入统计 | 只留痕，**照样计入命中率**（防止赛后挑掉错的） |
 
-台账每条带 `prev`/`hash` 组成哈希链。改写、删除、插入任意一条都会被 G2 发现。就算整条链重新算 hash，也改不动 `published.json` 锚定的已发布前缀。
+台账每条带 `prev`/`hash` 组成哈希链。改写、删除、插入任意一条都会被 G5 发现。就算整条链重新算 hash，也改不动 `published.json` 锚定的已发布前缀。
 
-## 8 道机械门禁
+## 7 道机械门禁（对齐参考实现的七道）
 
 CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的真实时间**跑一遍 `node football/bin/gates.mjs`，所以"开赛超 72 小时没录赛果""候选规则到期没裁决""样本库过旧"都会让 CI 变红。测试或门禁任一失败，`verify` 检查本身都会变红（信任评分照常计算）。
 
 | 门禁 | 检查内容 |
 |---|---|
-| G1 结构完整性 | 字段齐全、类型正确、字段序规范、seq 连续 |
-| G2 哈希链 | 逐条复算 hash；已发布前缀不得改写/截断 |
-| G3 概率量化 | 概率在 [0,1]、和≈1、pick 为最大项、TOP3 有序、λ 合法 |
-| G4 开赛锁定 | 预测早于开赛；赛果晚于开赛 105 分钟；不得倒签；改判先撤回 |
-| G5 覆盖率 | 回测不许挑场（样本库每场都要有预测和赛果）；实盘开赛超 72h 必须录赛果 |
-| G6 规则登记 | active 三要素齐全；撤回必须留痕；候选规则必须登记裁决阈值 `reviewAt.n`，样本达到阈值必须裁决（转 active 或撤回）；对照 `published.json` 里的登记表锚点，已发布的 active/retracted 规则口径不可改、不可删、不可降回候选、撤回不可恢复 |
-| G7 复算一致 | active 与撤回规则的数字现场复算 |
-| G8 数据质量 | 样本库与 `data/manifest.json` 指纹一致（不许手改）；同联赛去标点后同名的不同写法 = 队名分裂；行级校验（重复、比分、赔率、射正、Elo）；样本库超 30 天提示、超 120 天阻断 |
+| G1 结构完整性 | 字段齐全、类型正确、seq 连续 |
+| G2 字段序 | 字段顺序与规范一致；多字段/少字段/错位直接阻断（防止"改个字段名就能混进第一批"） |
+| G3 条款合规 | active 三要素齐全；撤回必须留痕；候选规则必须登记裁决阈值 `reviewAt.n`，样本达到阈值必须裁决（转 active 或撤回）；对照 `published.json` 里的登记表锚点，已发布的 active/retracted 规则口径不可改、不可删、不可降回候选、撤回不可恢复 |
+| G4 概率量化 | 概率在 [0,1]、和≈1、pick 为最大项、TOP3 有序、λ 合法 |
+| G5 跨批回归 | 台账哈希链逐条复算；已发布前缀（`published.json` 锚点）不得改写/截断；active 与撤回规则的 claim 现场复算，误差 ≤ 0.0005 且 n 一致 |
+| G6 覆盖率 | 回测不许挑场（样本库每场都要有预测和赛果）；实盘开赛超 72h 必须录赛果 |
+| G7 防呆 | 空输入不得静默通过（台账/登记表/样本库为空直接阻断）；预测必须早于开赛、赛果不得早于开赛 105 分钟、不得倒签、改判先撤回；样本库与 `data/manifest.json` 指纹一致（不许手改）、队名分裂、行级校验、超 30 天提示、超 120 天阻断 |
+
+> 与原 8 道的对应：原 G2 哈希链并入 G5 跨批回归（同为"批次之间不许改写"），原 G7 复算一致并入 G5，原 G6 规则登记改称 G3 条款合规，原 G4 开赛锁定与原 G8 数据质量并入 G7 防呆，原 G1 里的字段序抽成独立的 G2。
 
 ## 上线与定时运转
 
 | 工作流 | 何时运行 | 做什么 |
 |---|---|---|
-| `football-pages.yml` | 推到 main 且改了 `football/**` | 8 道门禁通过才把 `football/reports/` 部署到 GitHub Pages（首页 = 最新发布页）；门禁不过不上线 |
+| `football-pages.yml` | 推到 main 且改了 `football/**` | 7 道门禁通过才把 `football/reports/` 部署到 GitHub Pages（首页 = 最新发布页）；门禁不过不上线 |
 | `football-matchday.yml` | 每天 12:07 UTC（北京时间 20:07） | 录前一天欧冠赛果 → 抓当天欧冠赛程并出候选预测 → 门禁、测试、发布 → 开 PR 交人工审；台账没变化就什么都不做；上一个比赛日 PR 未合并时接在它上面继续（滚动 PR），避免哈希链冲突 |
-| `football-data-refresh.yml` | 每周一 03:17 UTC | 下载原始数据重建样本库与指纹清单，有变化就开 PR；不刷新的话 G8 会在样本库超 120 天时阻断，欧冠候选也会因 Elo 过旧停出 |
-| `verify-and-merge.yml` | 每个 PR | 单测 + 用真实时间跑 8 道门禁，任一失败 `verify` 变红 |
+| `football-data-refresh.yml` | 每周一 03:17 UTC | 下载原始数据重建样本库与指纹清单，有变化就开 PR；不刷新的话 G7 会在样本库超 120 天时阻断，欧冠候选也会因 Elo 过旧停出 |
+| `verify-and-merge.yml` | 每个 PR | 单测 + 用真实时间跑 7 道门禁，任一失败 `verify` 变红 |
 
 需要在仓库设置里打开的开关：
 1. Settings → Pages → Build and deployment → Source 选 **GitHub Actions**（公开仓库的 Pages 是公开网页）。

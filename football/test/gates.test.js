@@ -17,14 +17,14 @@ function sandbox() {
   return { dir, manifestFile: path.join(dir, 'manifest.json') };
 }
 
-// ---------- G8 数据质量 ----------
-test('G8：仓库样本库通过数据质量检查，且与指纹清单一致', () => {
+// ---------- G7 防呆（数据质量） ----------
+test('G7：仓库样本库通过数据质量检查，且与指纹清单一致', () => {
   const r = checkDataQuality({ now: '2026-11-24T00:00:00Z' });
   assert.deepEqual(r.errors, []);
   assert.equal(r.lastDate, '2026-09-03');
 });
 
-test('G8：能机械发现当初靠运气才发现的队名分裂', () => {
+test('G7：能机械发现当初靠运气才发现的队名分裂', () => {
   const splits = findSplitNames([['E0', 'Nottm Forest'], ['E0', "Nott'm Forest"], ['D1', 'MGladbach'], ['D1', "M'gladbach"], ['E0', 'Arsenal'], ['SP1', 'Nottm Forest']]);
   assert.deepEqual(splits.map((s) => s.names), [['Nott\'m Forest', 'Nottm Forest'], ["M'gladbach", 'MGladbach']]);
   const { dir, manifestFile } = sandbox();
@@ -36,14 +36,14 @@ test('G8：能机械发现当初靠运气才发现的队名分裂', () => {
   assert.ok(r.errors.some((e) => e.includes('指纹不符')), '手改样本库同时会被指纹发现');
 });
 
-test('G8：行级校验抓出重复、非法比分、半场多于全场、非法赔率与 Elo', () => {
+test('G7：行级校验抓出重复、非法比分、半场多于全场、非法赔率与 Elo', () => {
   const ok = { league: 'E0', date: '2026-01-01', home: 'A', away: 'B', fthg: '1', ftag: '0', hthg: '0', htag: '0', odd_h: '1.5', odd_d: '4', odd_a: '6', odd_over25: '', odd_under25: '', hst: '4', ast: '2', home_elo: '1800', away_elo: '1700' };
   assert.deepEqual(checkRows([ok]), []);
   const errors = checkRows([ok, ok, { ...ok, home: 'C', fthg: '-1' }, { ...ok, home: 'D', hthg: '2' }, { ...ok, home: 'E', odd_h: '0.9' }, { ...ok, home: 'F', home_elo: '3200' }, { ...ok, home: 'G', league: 'XX' }]).join('\n');
   for (const word of ['重复场次', '全场比分非法', '半场进球多于全场', 'odd_h 非法', 'home_elo 超出', '不在样本库范围']) assert.match(errors, new RegExp(word));
 });
 
-test('G8：样本库超过 30 天提示，超过 120 天阻断', () => {
+test('G7：样本库超过 30 天提示，超过 120 天阻断', () => {
   assert.equal(checkDataQuality({ now: '2026-09-20T00:00:00Z' }).warnings.length, 0);
   const stale = checkDataQuality({ now: '2026-11-24T00:00:00Z' });
   assert.equal(stale.errors.length, 0);

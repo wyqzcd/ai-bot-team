@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 生成回测台账 football/ledger/backtest.jsonl（确定性：同一数据集 + 同一模型版本 → 字节级相同）。
+ * 生成当前版本回测台账（路径见 src/config.mjs 的 PATHS.backtestLedger）（确定性：同一数据集 + 同一模型版本 → 字节级相同）。
  *
  * 用法：node football/bin/backtest.mjs [--from 2019-07-01] [--to YYYY-MM-DD] [--out <path>] [--data <csv>]
  *
@@ -8,7 +8,7 @@
  */
 import path from 'node:path';
 import { DEFAULT_DATASET, loadDataset } from '../src/dataset.mjs';
-import { BACKTEST_FROM, PATHS } from '../src/config.mjs';
+import { BACKTEST_FROM, BACKTEST_TO, PATHS } from '../src/config.mjs';
 import { predictionEntry, resultEntry, seal, writeLedger } from '../src/ledger.mjs';
 import { MODEL_NAME, MODEL_VERSION, walkForward } from '../src/walkforward.mjs';
 import { parseArgs, run } from '../src/cli.mjs';
@@ -16,7 +16,7 @@ import { parseArgs, run } from '../src/cli.mjs';
 run(async () => {
   const args = parseArgs(process.argv.slice(2), { options: ['from', 'to', 'out', 'data'] });
   const matches = loadDataset(args.data ?? DEFAULT_DATASET);
-  const { predictions, skipped } = walkForward(matches, { from: args.from ?? BACKTEST_FROM, to: args.to });
+  const { predictions, skipped } = walkForward(matches, { from: args.from ?? BACKTEST_FROM, to: args.to ?? BACKTEST_TO });
   const model = `${MODEL_NAME}@${MODEL_VERSION}`;
   const events = [];
   for (const { match, asOf, pred } of predictions) {

@@ -4,43 +4,95 @@
     {
       "id": "R-001",
       "title": "全样本方向命中（不筛选，作为对照锚点）",
-      "status": "active",
+      "status": "retracted",
       "definition": "方向 = 胜/平/负三选一，取模型概率最大的一项；赛果方向与之相同记 1 次命中。样本为回测台账里全部已结算预测，不做任何剔除。",
-      "sample": { "ledger": "ledger/backtest.jsonl", "filter": { "mode": "backtest", "from": "2019-07-01" } },
+      "sample": {
+        "ledger": "ledger/backtest.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
       "recompute": "node football/bin/stats.mjs --rule R-001",
-      "claim": { "metric": "direction_hit", "rate": 0.5223, "n": 12557 },
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.5223,
+        "n": 12557
+      },
       "baseline": "同样本赛前赔率热门 53.61%（n=12556），永远选主胜 43.12%。模型全样本略低于市场热门。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "retraction": {
+        "date": "2026-11-24",
+        "reason": "v1 样本库把同一球队拆成两种写法（Nottm Forest/Nott'm Forest、MGladbach/M'gladbach，2024-12 起切换），两队之后被当成新队、参数失真。v1 台账已发布冻结不改写，本条撤回留痕，数字仍可在 v1 台账上复算。",
+        "replacedBy": "R-006"
+      }
     },
     {
       "id": "R-002",
       "title": "高置信档（模型最大概率 ≥ 0.56）方向命中，留出段",
-      "status": "active",
+      "status": "retracted",
       "definition": "同 R-001 的方向命中口径，只统计模型最大方向概率 conf ≥ 0.56 的场次。阈值 0.56 由 football/bin/calibrate.mjs 只在训练段（开赛 < 2024-07-01）选出：训练段命中 ≥ 66% 的最小阈值（训练段 66.13%，n=2864）。留出段只报告，不回头调参。",
-      "sample": { "ledger": "ledger/backtest.jsonl", "filter": { "mode": "backtest", "from": "2024-07-01", "minConf": 0.56 } },
+      "sample": {
+        "ledger": "ledger/backtest.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "minConf": 0.56
+        }
+      },
       "recompute": "node football/bin/stats.mjs --rule R-002",
       "selection": "node football/bin/calibrate.mjs --target 0.66 --split 2024-07-01",
-      "claim": { "metric": "direction_hit", "rate": 0.6727, "n": 1103 },
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.6727,
+        "n": 1103
+      },
       "baseline": "覆盖率 30.62%（1103/3602）。同样本赛前赔率热门 67.45%：高置信档的命中主要来自'这些场次本来就一边倒'，模型在该档并未跑赢市场。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "retraction": {
+        "date": "2026-11-24",
+        "reason": "v1 样本库把同一球队拆成两种写法（Nottm Forest/Nott'm Forest、MGladbach/M'gladbach，2024-12 起切换），两队之后被当成新队、参数失真。v1 台账已发布冻结不改写，本条撤回留痕，数字仍可在 v1 台账上复算。",
+        "replacedBy": "R-007"
+      }
     },
     {
       "id": "R-003",
       "title": "全样本比分 TOP3 命中",
-      "status": "active",
+      "status": "retracted",
       "definition": "真实比分落在模型比分矩阵概率前三的比分之内记 1 次命中（三个比分都算，不是单比分）。",
-      "sample": { "ledger": "ledger/backtest.jsonl", "filter": { "mode": "backtest", "from": "2019-07-01" } },
+      "sample": {
+        "ledger": "ledger/backtest.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
       "recompute": "node football/bin/stats.mjs --rule R-003",
-      "claim": { "metric": "score_top3_hit", "rate": 0.3223, "n": 12557 },
+      "claim": {
+        "metric": "score_top3_hit",
+        "rate": 0.3223,
+        "n": 12557
+      },
       "baseline": "TOP3 比分口径；单比分命中会显著更低，两者不可混报。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "retraction": {
+        "date": "2026-11-24",
+        "reason": "v1 样本库把同一球队拆成两种写法（Nottm Forest/Nott'm Forest、MGladbach/M'gladbach，2024-12 起切换），两队之后被当成新队、参数失真。v1 台账已发布冻结不改写，本条撤回留痕，数字仍可在 v1 台账上复算。",
+        "replacedBy": "R-008"
+      }
     },
     {
       "id": "R-004",
       "title": "实盘高置信档（conf ≥ 0.56）方向命中",
       "status": "candidate",
-      "definition": "同 R-002 口径，但只统计 mode=live（真实赛前发布、开赛锁定）的预测。",
-      "sample": { "ledger": "ledger/live.jsonl", "filter": { "mode": "live", "minConf": 0.56 } },
+      "definition": "同 R-007 口径，但只统计 mode=live（真实赛前发布、开赛锁定）的预测；竞彩场次通过 football/bin/jczq.mjs 入账。",
+      "sample": {
+        "ledger": "ledger/live.jsonl",
+        "filter": {
+          "mode": "live",
+          "minConf": 0.56
+        }
+      },
       "recompute": "node football/bin/stats.mjs --ledger football/ledger/live.jsonl --filter '{\"mode\":\"live\",\"minConf\":0.56}'",
       "claim": null,
       "note": "实盘样本尚未积累，没有可复算的 claim，只能是候选。积累到 n ≥ 200 后再登记 claim 并申请转 active。",
@@ -51,14 +103,91 @@
       "title": "高置信档（conf ≥ 0.55）全样本方向命中 65.7%",
       "status": "retracted",
       "definition": "conf ≥ 0.55 的全部回测场次方向命中。",
-      "sample": { "ledger": "ledger/backtest.jsonl", "filter": { "mode": "backtest", "from": "2019-07-01", "minConf": 0.55 } },
+      "sample": {
+        "ledger": "ledger/backtest.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01",
+          "minConf": 0.55
+        }
+      },
       "recompute": "node football/bin/stats.mjs --filter '{\"mode\":\"backtest\",\"from\":\"2019-07-01\",\"minConf\":0.55}'",
-      "claim": { "metric": "direction_hit", "rate": 0.6566, "n": 4258 },
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.6566,
+        "n": 4258
+      },
       "retraction": {
         "date": "2026-11-24",
         "reason": "阈值 0.55 是看着全样本（含 2024-07 之后）的曲线挑的，属于数据窥探，命中率会被高估。以 R-002（训练段选阈值、留出段报告）替代。",
         "replacedBy": "R-002"
       },
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-006",
+      "title": "全样本方向命中（v2 台账，不筛选，作为对照锚点）",
+      "status": "active",
+      "definition": "方向 = 胜/平/负三选一，取模型概率最大的一项；赛果方向与之相同记 1 次命中。样本为 v2 回测台账里全部已结算预测，不做任何剔除。",
+      "sample": {
+        "ledger": "ledger/backtest-v2.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-006",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.5224,
+        "n": 12557
+      },
+      "baseline": "同样本赛前赔率热门 53.61%（n=12556），永远选主胜 43.12%。模型全样本略低于市场热门。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-007",
+      "title": "高置信档（模型最大概率 ≥ 0.56）方向命中，留出段（v2 台账）",
+      "status": "active",
+      "tier": "high-confidence",
+      "definition": "同 R-006 的方向命中口径，只统计 conf ≥ 0.56 的场次。阈值由 football/bin/calibrate.mjs 只在训练段（开赛 < 2024-07-01）选出：训练段命中 ≥ 66% 的最小阈值（训练段 66.13%，n=2864）。留出段只报告，不回头调参。",
+      "sample": {
+        "ledger": "ledger/backtest-v2.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "minConf": 0.56
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-007",
+      "selection": "node football/bin/calibrate.mjs --target 0.66 --split 2024-07-01",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.6712,
+        "n": 1104
+      },
+      "baseline": "覆盖率 30.65%（1104/3602）。同样本赛前赔率热门 67.30%：该档命中主要来自'这些场次本来就一边倒'，模型并未跑赢市场。错判 363 场中 224 场是平局。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-008",
+      "title": "全样本比分 TOP3 命中（v2 台账）",
+      "status": "active",
+      "definition": "真实比分落在模型比分矩阵概率前三的比分之内记 1 次命中（三个比分都算，不是单比分）。",
+      "sample": {
+        "ledger": "ledger/backtest-v2.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-008",
+      "claim": {
+        "metric": "score_top3_hit",
+        "rate": 0.3225,
+        "n": 12557
+      },
+      "baseline": "TOP3 比分口径；单比分命中会显著更低，两者不可混报。",
       "registeredAt": "2026-11-24"
     }
   ]

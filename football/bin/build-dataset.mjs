@@ -7,7 +7,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseCsv, toCsv } from '../src/csv.mjs';
-import { DATASET_COLUMNS, DEFAULT_DATASET, LEAGUES } from '../src/dataset.mjs';
+import { DATASET_COLUMNS, DEFAULT_DATASET, LEAGUES, canonicalTeam } from '../src/dataset.mjs';
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -29,8 +29,8 @@ const rows = parseCsv(readFileSync(raw, 'utf8'))
     league: row.Division,
     date: row.MatchDate,
     time: row.MatchTime ? row.MatchTime.slice(0, 5) : '',
-    home: row.HomeTeam,
-    away: row.AwayTeam,
+    home: canonicalTeam(row.HomeTeam),
+    away: canonicalTeam(row.AwayTeam),
     fthg: intText(row.FTHome),
     ftag: intText(row.FTAway),
     hthg: intText(row.HTHome),

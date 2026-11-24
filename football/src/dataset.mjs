@@ -19,6 +19,17 @@ export const LEAGUES = {
   F1: '法甲',
 };
 
+/**
+ * 数据源同一球队前后用过两种写法（2024-12 起切换），不合并会被当成两支球队、各只有一半样本。
+ * 统一到最新写法。新增别名必须同时补单测（样本库里不得再出现左侧写法）。
+ */
+export const TEAM_ALIASES = Object.freeze({
+  'Nottm Forest': "Nott'm Forest",
+  MGladbach: "M'gladbach",
+});
+
+export const canonicalTeam = (name) => TEAM_ALIASES[name] ?? name;
+
 export const DATASET_COLUMNS = [
   'league', 'date', 'time', 'home', 'away',
   'fthg', 'ftag', 'hthg', 'htag',

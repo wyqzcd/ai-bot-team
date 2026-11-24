@@ -26,8 +26,9 @@ function table(head, rows) {
   }</tbody></table>`;
 }
 
-export function renderReport({ generatedAt, gates, registry, ledgers, model }) {
+export function renderReport({ generatedAt, gates, registry, ledgers, model, jczqRefs = {} }) {
   const byLabel = Object.fromEntries(ledgers.map((l) => [l.label, l.entries]));
+  const backtest = ledgers.find((l) => l.role === 'backtest')?.entries ?? null;
   const rules = registry.rules.map((rule) => ({ rule, status: effectiveStatus(rule) }));
   const active = rules.filter((r) => r.status === 'active');
   const ruleRows = active.map(({ rule }) => {
@@ -45,13 +46,16 @@ export function renderReport({ generatedAt, gates, registry, ledgers, model }) {
     ];
   });
 
-  const curve = byLabel.backtest ? coverageCurve(byLabel.backtest, { mode: 'backtest', from: '2024-07-01' }) : [];
-  const live = byLabel.live ?? [];
+  // 高置信档口径只从登记表的 active 规则读，不在这里硬编码阈值。
+  const highTier = active.find(({ rule }) => rule.tier === 'high-confidence')?.rule ?? null;
+  const holdoutFrom = highTier?.sample.filter.from ?? '2024-07-01';
+  const curve = backtest ? coverageCurve(backtest, { mode: 'backtest', from: holdoutFrom }) : [];
+  const live = ledgers.find((l) => l.role === 'live')?.entries ?? [];
   const liveFold = foldLedger(live);
   const upcoming = liveFold.filter((x) => x.prediction && !x.result).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : 1));
   const liveStats = computeStats(live, { mode: 'live' });
   const liveReview = review(live, { mode: 'live' });
-  const recentReview = byLabel.backtest ? review(byLabel.backtest, { mode: 'backtest', from: '2024-07-01', minConf: 0.56 }) : null;
+  const recentReview = backtest && highTier ? review(backtest, highTier.sample.filter) : null;
   const liveRetractions = live.filter((e) => e.type === 'retraction');
   const retractedRules = rules.filter((r) => r.status === 'retracted');
   const candidates = rules.filter((r) => r.status === 'candidate');
@@ -90,20 +94,28 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
 <h2>已登记结论（active 规则，现场复算）</h2>
 <div class="scroll">${table(['规则', '复算命中', 'n', '覆盖率', '同样本·市场热门', '同样本·永远主胜', '复算命令'], ruleRows)}</div>
 
-<h2>置信度-覆盖率曲线（留出段 2024-07 起）</h2>
+<h2>置信度-覆盖率曲线（留出段 ${esc(holdoutFrom)} 起）</h2>
 <div class="scroll">${table(['conf ≥', 'n', '覆盖率', '模型方向命中', '同样本·市场热门'], curve.map((c) => [c.minConf.toFixed(2), c.n, pct(c.coverage), pct(c.direction), pct(c.market_fav_same_sample)]))}</div>
 
 <h2>实盘：待开赛预测（开赛即锁定）</h2>
-<div class="scroll">${table(['开赛 (UTC)', '联赛', '对阵', '方向', 'conf', '胜/平/负', 'λ', '比分 TOP3', '#'], upcoming.map(({ prediction: p }) => [
-    esc(p.kickoff.replace('T', ' ').replace('Z', '')), esc(LEAGUES[p.league] ?? p.league), `${esc(p.home)} vs ${esc(p.away)}`, PICK_LABEL[p.pick], pct(p.conf), p.probs.map(pct).join(' / '), p.lam.join(' / '), p.top3.map((s) => esc(s[0])).join(', '), p.seq,
-  ]))}</div>
+<div class="scroll">${table(['竞彩', '开赛 (北京时间)', '联赛', '对阵', '方向', 'conf', '高置信档', '胜/平/负', 'λ', '比分 TOP3', '#'], upcoming.map(({ prediction: p }) => {
+    const ref = jczqRefs[p.id];
+    const kickoff08 = new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
+    const high = highTier && p.conf >= highTier.sample.filter.minConf;
+    return [
+      ref ? esc(ref.no) : '<span class="muted">—</span>', esc(kickoff08), esc(LEAGUES[p.league] ?? p.league),
+      ref ? `${esc(ref.home)} vs ${esc(ref.away)}<br><span class="muted">${esc(p.home)} vs ${esc(p.away)}</span>` : `${esc(p.home)} vs ${esc(p.away)}`,
+      PICK_LABEL[p.pick], pct(p.conf), high ? `<b>是</b>（≥ ${highTier.sample.filter.minConf}）` : '<span class="muted">否</span>',
+      p.probs.map(pct).join(' / '), p.lam.join(' / '), p.top3.map((s) => esc(s[0])).join(', '), p.seq,
+    ];
+  }))}</div>
 
 <h2>实盘战绩</h2>
 <div class="card">已结算 ${liveStats.n} 场 · 方向命中 ${pct(liveStats.direction_hit.rate)} · 同样本市场热门 ${pct(liveStats.baselines.market_fav.rate)}（n=${liveStats.baselines.market_fav.n}） · 比分 TOP3 ${pct(liveStats.score_top3_hit.rate)}
 ${liveStats.n < 200 ? '<br><span class="muted">实盘样本 &lt; 200，命中率波动很大，只作记录，不作结论（见候选规则 R-004）。</span>' : ''}</div>
 
 <h2>赛后归因（机械分类）</h2>
-<div class="scroll">${table(['原因', '实盘', '回测高置信档（留出段）'], Object.keys(CAUSE_LABEL).map((k) => [esc(CAUSE_LABEL[k]), liveReview.buckets[k] ?? 0, recentReview?.buckets[k] ?? 0]))}</div>
+<div class="scroll">${table(['原因', '实盘', `回测高置信档（${highTier ? esc(highTier.id) : '—'}）`], Object.keys(CAUSE_LABEL).map((k) => [esc(CAUSE_LABEL[k]), liveReview.buckets[k] ?? 0, recentReview?.buckets[k] ?? 0]))}</div>
 
 <h2>撤回留痕</h2>
 <div class="scroll">${table(['对象', '撤回日期', '原因'], [

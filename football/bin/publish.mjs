@@ -6,7 +6,7 @@
  *
  * 用法：node football/bin/publish.mjs [--dry-run] [--out <file.html>]
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PATHS } from '../src/config.mjs';
 import { gateInputs } from '../src/pipeline.mjs';
@@ -25,7 +25,8 @@ run(async () => {
     console.error(JSON.stringify({ ...summary, note: '门禁未通过，阻断发布，未写任何文件' }, null, 2));
     process.exit(1);
   }
-  const html = renderReport({ generatedAt, gates, registry: inputs.registry, ledgers: inputs.ledgers, model: `${MODEL_NAME}@${MODEL_VERSION}` });
+  const jczqRefs = existsSync(PATHS.jczqRefs) ? JSON.parse(readFileSync(PATHS.jczqRefs, 'utf8')) : {};
+  const html = renderReport({ generatedAt, gates, registry: inputs.registry, ledgers: inputs.ledgers, model: `${MODEL_NAME}@${MODEL_VERSION}`, jczqRefs });
   const out = args.out ? path.resolve(args.out) : path.join(PATHS.reports, `${generatedAt.slice(0, 10)}.html`);
   const anchors = { publishedAt: generatedAt, report: path.relative(path.dirname(PATHS.anchors), out) };
   for (const l of inputs.ledgers) anchors[l.label] = { entries: l.entries.length, lastHash: l.entries.at(-1)?.hash ?? null };

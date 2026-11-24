@@ -287,8 +287,8 @@ test('仓库提交的回测台账 + 登记表通过全部 7 道门禁', () => {
   assert.equal(report.gates.length, 7);
 });
 
-test('stats.mjs --rule R-002 一键复算并与登记值一致', () => {
-  const out = spawnSync(process.execPath, [path.join(REPO, 'football/bin/stats.mjs'), '--rule', 'R-002'], { encoding: 'utf8' });
+test('stats.mjs --rule R-007 一键复算并与登记值一致', () => {
+  const out = spawnSync(process.execPath, [path.join(REPO, 'football/bin/stats.mjs'), '--rule', 'R-007'], { encoding: 'utf8' });
   assert.equal(out.status, 0, out.stderr);
   const row = JSON.parse(out.stdout.trim());
   assert.equal(row.reproduced, true);
@@ -296,9 +296,11 @@ test('stats.mjs --rule R-002 一键复算并与登记值一致', () => {
   assert.ok(row.baselines.market_fav.rate !== null, '必须同时给出同样本市场基线');
 });
 
-test('回测台账每条 hash 可独立重算', () => {
-  const entries = readLedger(path.join(REPO, 'football/ledger/backtest.jsonl'));
-  for (const i of [0, 1, Math.floor(entries.length / 2), entries.length - 1]) assert.equal(hashEntry(entries[i]), entries[i].hash);
+test('回测台账（冻结的 v1 与当前 v2）每条 hash 可独立重算', () => {
+  for (const file of ['backtest.jsonl', 'backtest-v2.jsonl']) {
+    const entries = readLedger(path.join(REPO, 'football/ledger', file));
+    for (const i of [0, 1, Math.floor(entries.length / 2), entries.length - 1]) assert.equal(hashEntry(entries[i]), entries[i].hash, file);
+  }
   const registry = JSON.parse(readFileSync(path.join(REPO, 'football/rules/registry.json'), 'utf8'));
   assert.ok(registry.rules.some((r) => r.status === 'retracted' && r.retraction?.reason), '登记表保留撤回留痕示例');
 });

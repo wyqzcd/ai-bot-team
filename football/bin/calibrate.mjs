@@ -6,7 +6,7 @@
  * 用法：node football/bin/calibrate.mjs [--target 0.66] [--split 2024-07-01] [--ledger <path>]
  */
 import path from 'node:path';
-import { FOOTBALL_ROOT } from '../src/dataset.mjs';
+import { PATHS } from '../src/config.mjs';
 import { readLedger } from '../src/ledger.mjs';
 import { computeStats } from '../src/metrics.mjs';
 import { parseArgs, run } from '../src/cli.mjs';
@@ -15,7 +15,7 @@ run(async () => {
   const args = parseArgs(process.argv.slice(2), { options: ['target', 'split', 'ledger'] });
   const target = Number(args.target ?? 0.66);
   const split = args.split ?? '2024-07-01';
-  const entries = readLedger(args.ledger ?? path.join(FOOTBALL_ROOT, 'ledger', 'backtest.jsonl'));
+  const entries = readLedger(args.ledger ? path.resolve(args.ledger) : PATHS.backtestLedger);
   const dayBefore = new Date(Date.parse(`${split}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
   let chosen = null;
   const grid = [];

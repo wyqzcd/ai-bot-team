@@ -12,7 +12,7 @@ import { fitEloPoisson, loadEloModel, predictElo } from '../src/elo.mjs';
 import { GENESIS, foldLedger, hashEntry, readLedger, seal } from '../src/ledger.mjs';
 import { computeStats, attributeMiss, outcomeOf } from '../src/metrics.mjs';
 import { checkRegistry, effectiveStatus } from '../src/rules.mjs';
-import { g1Structure, g2HashChain, g3Probability, g4Lock, g5Coverage } from '../src/gates.mjs';
+import { checkLock, g1Structure, g2FieldOrder, g4Probability, g5HashChain, g6Coverage } from '../src/gates.mjs';
 import { LiveError, normalizeFixture, planPredictions, planResult, planRetraction } from '../src/live.mjs';
 import { runAllGates } from '../src/pipeline.mjs';
 
@@ -150,11 +150,11 @@ test('Elo 泊松：拟合只用训练窗口内的比赛', () => {
 // ---------- 台账与哈希链 ----------
 test('G2：任何静默改写都会让哈希链断裂', () => {
   const entries = chain([pred(), res('E0|2026-01-10|A|B', [1, 0])]);
-  assert.equal(g2HashChain(entries, 't').ok, true);
+  assert.equal(g5HashChain(entries, 't').ok, true);
   assert.equal(entries[0].prev, GENESIS);
   const tampered = entries.map((e) => ({ ...e }));
   tampered[1].ft = [0, 1];
-  const report = g2HashChain(tampered, 't');
+  const report = g5HashChain(tampered, 't');
   assert.equal(report.ok, false);
   assert.match(report.errors[0], /hash 不符/);
 });
@@ -163,46 +163,47 @@ test('G2：即使整条链重新算 hash，也改不动已发布锚点', () => {
   const original = chain([pred(), res('E0|2026-01-10|A|B', [1, 0])]);
   const anchor = { entries: 2, lastHash: original[1].hash };
   const rewritten = chain([pred(), res('E0|2026-01-10|A|B', [0, 1])]);
-  assert.equal(g2HashChain(rewritten, 't').ok, true, '自洽的伪造链本身能过链校验');
-  const report = g2HashChain(rewritten, 't', anchor);
+  assert.equal(g5HashChain(rewritten, 't').ok, true, '自洽的伪造链本身能过链校验');
+  const report = g5HashChain(rewritten, 't', anchor);
   assert.equal(report.ok, false);
   assert.match(report.errors[0], /发布锚点/);
-  assert.equal(g2HashChain(original.slice(0, 1), 't', anchor).ok, false, '截断也会被拦下');
+  assert.equal(g5HashChain(original.slice(0, 1), 't', anchor).ok, false, '截断也会被拦下');
 });
 
-test('G1：字段序、多余字段、跳号都会被拦下', () => {
+test('G1/G2：字段序、多余字段归字段序门禁，跳号归结构门禁', () => {
   const entries = chain([pred(), res('E0|2026-01-10|A|B', [1, 0])]);
   assert.equal(g1Structure(entries, 't').ok, true);
+  assert.equal(g2FieldOrder(entries, 't').ok, true);
   const reordered = [{ hash: entries[0].hash, ...entries[0] }, entries[1]];
-  assert.equal(g1Structure(reordered, 't').ok, false);
+  assert.equal(g2FieldOrder(reordered, 't').ok, false, '字段序错位/多余字段由 G2 拦下');
   assert.equal(g1Structure([entries[1]], 't').ok, false, 'seq 不从 1 开始');
 });
 
 test('G3：概率和不为 1 或 pick 不是最大项会被拦下', () => {
-  assert.equal(g3Probability(chain([pred()]), 't').ok, true);
+  assert.equal(g4Probability(chain([pred()]), 't').ok, true);
   const bad = chain([{ ...pred(), probs: [0.5, 0.3, 0.3] }]);
-  assert.equal(g3Probability(bad, 't').ok, false);
+  assert.equal(g4Probability(bad, 't').ok, false);
   const wrongPick = chain([{ ...pred(), pick: 'a' }]);
-  assert.equal(g3Probability(wrongPick, 't').ok, false);
+  assert.equal(g4Probability(wrongPick, 't').ok, false);
 });
 
 // ---------- 开赛锁定 ----------
 test('G4：开赛后出的预测、倒签补录、赛后改判、过早赛果全部拦下', () => {
-  assert.equal(g4Lock(chain([pred()]), 't').ok, true);
-  assert.equal(g4Lock(chain([pred({ createdAt: '2026-01-10T15:00:00Z' })]), 't').ok, false, '开赛时刻出预测');
+  assert.equal(checkLock(chain([pred()]), 't').ok, true);
+  assert.equal(checkLock(chain([pred({ createdAt: '2026-01-10T15:00:00Z' })]), 't').ok, false, '开赛时刻出预测');
   const backdated = chain([pred({ id: 'E0|2026-01-10|C|D', createdAt: '2026-01-09T12:00:00Z' }), pred({ createdAt: '2026-01-09T10:00:00Z' })]);
-  assert.match(g4Lock(backdated, 't').errors.join(), /倒签/);
+  assert.match(checkLock(backdated, 't').errors.join(), /倒签/);
   const afterResult = chain([pred(), res('E0|2026-01-10|A|B', [1, 0]), pred({ createdAt: '2026-01-10T18:00:00Z', kickoff: '2026-01-11T15:00:00Z' })]);
-  assert.equal(g4Lock(afterResult, 't').ok, false);
+  assert.equal(checkLock(afterResult, 't').ok, false);
   const doublePick = chain([pred(), pred({ createdAt: '2026-01-09T11:00:00Z' })]);
-  assert.match(g4Lock(doublePick, 't').errors.join(), /改判须先赛前撤回/);
+  assert.match(checkLock(doublePick, 't').errors.join(), /改判须先赛前撤回/);
   const early = chain([pred(), res('E0|2026-01-10|A|B', [1, 0], '2026-01-10T15:30:00Z')]);
-  assert.match(g4Lock(early, 't').errors.join(), /105 分钟/);
+  assert.match(checkLock(early, 't').errors.join(), /105 分钟/);
 });
 
 test('G4：赛前先撤回再改判是允许的', () => {
   const entries = chain([pred(), retr(1, 'E0|2026-01-10|A|B', '2026-01-09T11:00:00Z'), pred({ createdAt: '2026-01-09T11:00:00Z', probs: [0.5, 0.3, 0.2] })]);
-  assert.equal(g4Lock(entries, 't').ok, true);
+  assert.equal(checkLock(entries, 't').ok, true);
 });
 
 // ---------- 统计口径 ----------
@@ -290,11 +291,11 @@ test('撤回规则留痕里的数字同样要能复算', () => {
 // ---------- 覆盖率 ----------
 test('G5：回测挑场、实盘赛果逾期都会被拦下', () => {
   const entries = chain([pred(), res('E0|2026-01-10|A|B', [1, 0])]);
-  assert.equal(g5Coverage(entries, 't', { expectedIds: new Set(['E0|2026-01-10|A|B']) }).ok, true);
-  assert.equal(g5Coverage(entries, 't', { expectedIds: new Set(['E0|2026-01-10|A|B', 'E0|2026-01-11|X|Y']) }).ok, false);
+  assert.equal(g6Coverage(entries, 't', { expectedIds: new Set(['E0|2026-01-10|A|B']) }).ok, true);
+  assert.equal(g6Coverage(entries, 't', { expectedIds: new Set(['E0|2026-01-10|A|B', 'E0|2026-01-11|X|Y']) }).ok, false);
   const open = chain([pred()]);
-  assert.equal(g5Coverage(open, 't', { now: '2026-01-11T15:00:00Z' }).ok, true, '24h 内未录赛果允许');
-  assert.equal(g5Coverage(open, 't', { now: '2026-01-14T15:00:00Z' }).ok, false, '超 72h 必须录');
+  assert.equal(g6Coverage(open, 't', { now: '2026-01-11T15:00:00Z' }).ok, true, '24h 内未录赛果允许');
+  assert.equal(g6Coverage(open, 't', { now: '2026-01-14T15:00:00Z' }).ok, false, '超 72h 必须录');
 });
 
 // ---------- 实盘流程 ----------
@@ -335,10 +336,11 @@ test('实盘：赛果要等完场、不可重复；撤回必须写原因', () =>
 });
 
 // ---------- 仓库真实台账：可复算 ----------
-test('仓库提交的台账、登记表、样本库通过全部 8 道门禁', () => {
+test('仓库提交的台账、登记表、样本库通过全部 7 道门禁', () => {
   const report = runAllGates({ now: '2026-11-24T13:00:00Z' });
   for (const g of report.gates) assert.equal(g.ok, true, `${g.id} ${g.name}: ${g.errors.join('; ')}`);
-  assert.equal(report.gates.length, 8);
+  assert.equal(report.gates.length, 7);
+  assert.deepEqual(report.gates.map((g) => g.name), ['结构完整性', '字段序', '条款合规', '概率量化', '跨批回归', '覆盖率', '防呆']);
 });
 
 test('stats.mjs --rule R-007 一键复算并与登记值一致', () => {

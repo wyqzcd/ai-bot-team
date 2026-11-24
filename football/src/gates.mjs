@@ -1,14 +1,15 @@
 /**
- * 8 道机械门禁：任一 ERROR 即阻断发布（publish.mjs 不写任何文件，退出码 1）。
+ * 7 道机械门禁：任一 ERROR 即阻断发布（publish.mjs 不写任何文件，退出码 1）。
+ * 口径对齐参考实现（MattCheng23/football-analysis）的七道：
  *
- *   G1 结构完整性  每条字段齐全、类型正确、字段序与规范一致、seq 从 1 连续
- *   G2 哈希链      prev/hash 逐条可复算；已发布锚点（published.json）记录的前缀不得被改写
- *   G3 概率量化    概率在 [0,1]、三项和≈1、pick 是最大项、conf=probs[pick]、档位和≈1、TOP3 有序
- *   G4 开赛锁定    预测必须早于开赛；赛果不得早于开赛 + 105 分钟；有赛果后不得再预测；同场改判必须先赛前撤回
- *   G5 覆盖率      回测：样本库窗口内每场都有预测和赛果（不许挑场）；实盘：开赛超 72h 仍无赛果即阻断
- *   G6 规则登记    active 规则三要素齐全；撤回必须留痕；候选到期须裁决；已发布规则口径不可改（对照发布锚点）
- *   G7 复算一致    active 规则的 claim 现场复算，rate 误差 ≤ 0.0005 且 n 一致
- *   G8 数据质量    样本库指纹、队名分裂、行级校验、新鲜度（见 quality.mjs）
+ *   G1 结构完整性  每条字段齐全、类型正确、seq 从 1 连续
+ *   G2 字段序      字段顺序与规范一致（字段序错位即阻断）
+ *   G3 条款合规    active 规则三要素齐全；撤回必须留痕；候选到期须裁决；已发布规则口径不可改（登记表锚点）
+ *   G4 概率量化    概率在 [0,1]、三项和≈1、pick 是最大项、conf=probs[pick]、档位和≈1、TOP3 有序
+ *   G5 跨批回归    台账哈希链逐条可复算；已发布前缀（published.json 锚点）不得改写/截断；规则 claim 现场复算
+ *   G6 覆盖率      回测：样本库窗口内每场都有预测和赛果（不许挑场）；实盘：开赛超 72h 仍无赛果即阻断
+ *   G7 防呆        空输入不得静默通过；开赛锁定（预测早于开赛、赛果晚于开赛 105 分钟、不得倒签、改判先撤回）；
+ *                  数据质量（指纹、队名分裂、行级校验、新鲜度，见 quality.mjs）
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { FIELD_ORDER, GENESIS, PICKS, foldLedger, hashEntry } from './ledger.mjs';
@@ -46,17 +47,15 @@ function eventTime(entry) {
   return entry.type === 'result' ? entry.recordedAt : entry.createdAt;
 }
 
+// ---------- G1 结构完整性 ----------
 export function g1Structure(entries, label) {
   const g = gate('G1', '结构完整性');
   entries.forEach((entry, index) => {
     const at = `${label}#${index + 1}`;
-    const order = FIELD_ORDER[entry?.type];
-    if (!order) {
+    if (!FIELD_ORDER[entry?.type]) {
       g.error(`${at}: 未知 type=${entry?.type}`);
       return;
     }
-    const keys = Object.keys(entry);
-    if (keys.join(',') !== order.join(',')) g.error(`${at}: 字段/字段序不符，期望 ${order.join(',')}`);
     if (entry.seq !== index + 1) g.error(`${at}: seq=${entry.seq}，应为 ${index + 1}（不得跳号/插入）`);
     if (typeof entry.id !== 'string' || entry.id === '') g.error(`${at}: id 为空`);
     if (entry.type === 'prediction') {
@@ -86,33 +85,30 @@ export function g1Structure(entries, label) {
   return g.done();
 }
 
-/** anchor: { entries, lastHash } —— 上次发布时的台账长度与末条 hash */
-export function g2HashChain(entries, label, anchor = null) {
-  const g = gate('G2', '哈希链');
-  let prev = GENESIS;
+// ---------- G2 字段序 ----------
+export function g2FieldOrder(entries, label) {
+  const g = gate('G2', '字段序');
   entries.forEach((entry, index) => {
-    const at = `${label}#${index + 1}`;
-    if (entry.prev !== prev) g.error(`${at}: prev 断链（期望 ${prev}，实际 ${entry.prev}）`);
-    let expected = null;
-    try {
-      expected = hashEntry(entry);
-    } catch (error) {
-      g.error(`${at}: 无法计算 hash（${error.message}）`);
-    }
-    if (expected !== null && entry.hash !== expected) g.error(`${at}: hash 不符，条目被改写过（期望 ${expected}）`);
-    prev = entry.hash;
+    const order = FIELD_ORDER[entry?.type];
+    if (!order) return; // 未知 type 交给 G1 报，避免重复噪声
+    if (Object.keys(entry).join(',') !== order.join(',')) g.error(`${label}#${index + 1}: 字段/字段序不符，期望 ${order.join(',')}`);
   });
-  if (anchor) {
-    if (entries.length < anchor.entries) g.error(`${label}: 已发布 ${anchor.entries} 条，现在只有 ${entries.length} 条（台账被截断）`);
-    else if (anchor.entries > 0 && entries[anchor.entries - 1].hash !== anchor.lastHash) {
-      g.error(`${label}: 第 ${anchor.entries} 条 hash 与发布锚点 ${anchor.lastHash} 不符（已发布内容被改写）`);
-    }
-  }
   return g.done();
 }
 
-export function g3Probability(entries, label) {
-  const g = gate('G3', '概率量化');
+// ---------- G3 条款合规 ----------
+export function g3ClauseCompliance(registry, anchor = null) {
+  const g = gate('G3', '条款合规');
+  checkRegistryAnchor(registry, anchor).forEach(g.error);
+  const report = checkRegistry(registry, { recompute: false });
+  report.errors.forEach(g.error);
+  report.warnings.forEach(g.warn);
+  return g.done();
+}
+
+// ---------- G4 概率量化 ----------
+export function g4Probability(entries, label) {
+  const g = gate('G4', '概率量化');
   for (const entry of entries) {
     if (entry.type !== 'prediction') continue;
     const at = `${label}#${entry.seq}`;
@@ -138,8 +134,74 @@ export function g3Probability(entries, label) {
   return g.done();
 }
 
-export function g4Lock(entries, label) {
-  const g = gate('G4', '开赛锁定');
+// ---------- G5 跨批回归 ----------
+/** 台账哈希链 + 发布锚点：锚点记录的前缀（上一批）不得被改写或截断。 */
+export function g5HashChain(entries, label, anchor = null) {
+  const g = gate('G5', '跨批回归');
+  let prev = GENESIS;
+  entries.forEach((entry, index) => {
+    const at = `${label}#${index + 1}`;
+    if (entry.prev !== prev) g.error(`${at}: prev 断链（期望 ${prev}，实际 ${entry.prev}）`);
+    let expected = null;
+    try {
+      expected = hashEntry(entry);
+    } catch (error) {
+      g.error(`${at}: 无法计算 hash（${error.message}）`);
+    }
+    if (expected !== null && entry.hash !== expected) g.error(`${at}: hash 不符，条目被改写过（期望 ${expected}）`);
+    prev = entry.hash;
+  });
+  if (anchor) {
+    if (entries.length < anchor.entries) g.error(`${label}: 已发布 ${anchor.entries} 条，现在只有 ${entries.length} 条（台账被截断）`);
+    else if (anchor.entries > 0 && entries[anchor.entries - 1].hash !== anchor.lastHash) {
+      g.error(`${label}: 第 ${anchor.entries} 条 hash 与发布锚点 ${anchor.lastHash} 不符（已发布内容被改写）`);
+    }
+  }
+  return g.done();
+}
+
+/** active 与撤回规则的 claim 现场复算：上一批登记的结论在新代码下必须重现。 */
+export function g5Recompute(registry) {
+  const g = gate('G5', '跨批回归');
+  const report = checkRegistry(registry, { recompute: true });
+  report.recomputeErrors.forEach(g.error);
+  return { ...g.done(), rules: report.rules.filter((rule) => rule.recomputed).map((rule) => ({ id: rule.id, rate: rule.recomputed.rate, n: rule.recomputed.n })) };
+}
+
+// ---------- G6 覆盖率 ----------
+/**
+ * expected: 回测时传入样本库中应覆盖的比赛 id 集合；now: 实盘判断赛果是否逾期。
+ */
+export function g6Coverage(entries, label, { expectedIds = null, now = null } = {}) {
+  const g = gate('G6', '覆盖率');
+  const folded = foldLedger(entries);
+  const predicted = new Set(folded.filter((item) => item.prediction).map((item) => item.id));
+  if (expectedIds) {
+    let missing = 0;
+    for (const id of expectedIds) {
+      if (!predicted.has(id)) {
+        missing += 1;
+        if (missing <= MAX_LISTED) g.error(`${label}: 样本库比赛 ${id} 没有预测（不允许挑场）`);
+      }
+    }
+    if (missing > MAX_LISTED) g.error(`${label}: 另有 ${missing - MAX_LISTED} 场缺预测`);
+    for (const id of predicted) if (!expectedIds.has(id)) g.error(`${label}: 预测 ${id} 不在样本库窗口内`);
+  }
+  const nowMs = now ? Date.parse(now) : null;
+  for (const item of folded) {
+    if (!item.prediction || item.result) continue;
+    const overdue = nowMs !== null && nowMs - Date.parse(item.prediction.kickoff) > RESULT_GRACE_HOURS * 3600 * 1000;
+    if (item.prediction.mode === 'backtest') g.error(`${label}: 回测预测 ${item.id} 没有赛果`);
+    else if (overdue) g.error(`${label}: ${item.id} 开赛已超 ${RESULT_GRACE_HOURS}h 仍未录赛果（错的也必须入账）`);
+  }
+  for (const item of folded) if (item.result && !item.prediction && item.voided.length === 0) g.warn(`${label}: ${item.id} 有赛果但没有预测`);
+  return g.done();
+}
+
+// ---------- G7 防呆 ----------
+/** 开赛锁定：预测早于开赛；赛果晚于开赛 + 105 分钟；不得倒签；有赛果后不得再预测；同场改判必须先赛前撤回。 */
+export function checkLock(entries, label) {
+  const g = gate('G7', '防呆');
   const bySeq = new Map();
   const resulted = new Set();
   const active = new Map();
@@ -181,48 +243,30 @@ export function g4Lock(entries, label) {
 }
 
 /**
- * expected: 回测时传入样本库中应覆盖的比赛 id 集合；now: 实盘判断赛果是否逾期。
+ * 防呆总闸：空输入不得静默通过 + 开赛锁定 + 数据质量。
+ * @param {object} input
+ * @param {Array<{label, entries, role?}>} input.ledgers
+ * @param {object} input.registry
+ * @param {string} input.now
+ * @param {object} input.dataQuality
  */
-export function g5Coverage(entries, label, { expectedIds = null, now = null } = {}) {
-  const g = gate('G5', '覆盖率');
-  const folded = foldLedger(entries);
-  const predicted = new Set(folded.filter((item) => item.prediction).map((item) => item.id));
-  if (expectedIds) {
-    let missing = 0;
-    for (const id of expectedIds) {
-      if (!predicted.has(id)) {
-        missing += 1;
-        if (missing <= MAX_LISTED) g.error(`${label}: 样本库比赛 ${id} 没有预测（不允许挑场）`);
-      }
+export function g7Foolproof({ ledgers, registry, now, dataQuality = {} }) {
+  const g = gate('G7', '防呆');
+  if (!Array.isArray(ledgers) || ledgers.length === 0) g.error('没有任何台账输入（防呆：空输入不得静默通过）');
+  else {
+    if (ledgers.every((l) => (l.entries ?? []).length === 0)) g.error('全部台账为空（防呆：空输入不得静默通过）');
+    for (const l of ledgers) {
+      const lock = checkLock(l.entries ?? [], l.label);
+      lock.errors.forEach(g.error);
+      lock.warnings.forEach(g.warn);
     }
-    if (missing > MAX_LISTED) g.error(`${label}: 另有 ${missing - MAX_LISTED} 场缺预测`);
-    for (const id of predicted) if (!expectedIds.has(id)) g.error(`${label}: 预测 ${id} 不在样本库窗口内`);
   }
-  const nowMs = now ? Date.parse(now) : null;
-  for (const item of folded) {
-    if (!item.prediction || item.result) continue;
-    const overdue = nowMs !== null && nowMs - Date.parse(item.prediction.kickoff) > RESULT_GRACE_HOURS * 3600 * 1000;
-    if (item.prediction.mode === 'backtest') g.error(`${label}: 回测预测 ${item.id} 没有赛果`);
-    else if (overdue) g.error(`${label}: ${item.id} 开赛已超 ${RESULT_GRACE_HOURS}h 仍未录赛果（错的也必须入账）`);
-  }
-  for (const item of folded) if (item.result && !item.prediction && item.voided.length === 0) g.warn(`${label}: ${item.id} 有赛果但没有预测`);
+  if (!registry?.rules?.length) g.error('登记表为空（防呆：空输入不得静默通过）');
+  const quality = checkDataQuality({ ...dataQuality, now });
+  quality.errors.forEach(g.error);
+  quality.warnings.forEach(g.warn);
+  if (!quality.lastDate) g.error('样本库为空或无法解析（防呆：空输入不得静默通过）');
   return g.done();
-}
-
-export function g6Registry(registry, anchor = null) {
-  const g = gate('G6', '规则登记');
-  checkRegistryAnchor(registry, anchor).forEach(g.error);
-  const report = checkRegistry(registry, { recompute: false });
-  report.errors.forEach(g.error);
-  report.warnings.forEach(g.warn);
-  return g.done();
-}
-
-export function g7Recompute(registry) {
-  const g = gate('G7', '复算一致');
-  const report = checkRegistry(registry, { recompute: true });
-  report.recomputeErrors.forEach(g.error);
-  return { ...g.done(), rules: report.rules.filter((rule) => rule.recomputed).map((rule) => ({ id: rule.id, rate: rule.recomputed.rate, n: rule.recomputed.n })) };
 }
 
 export function readAnchor(file) {
@@ -237,14 +281,6 @@ export function readAnchor(file) {
  * @param {object} input.anchors label → {entries,lastHash}
  * @param {string} input.now
  */
-export function g8DataQuality(options) {
-  const g = gate('G8', '数据质量');
-  const report = checkDataQuality(options);
-  report.errors.forEach(g.error);
-  report.warnings.forEach(g.warn);
-  return { ...g.done(), errorCount: report.errorCount };
-}
-
 export function runGates({ ledgers, registry, anchors = {}, now, dataQuality = {} }) {
   const merge = (id, name, parts) => {
     const errors = parts.flatMap((p) => p.errors);
@@ -252,13 +288,12 @@ export function runGates({ ledgers, registry, anchors = {}, now, dataQuality = {
   };
   const results = [
     merge('G1', '结构完整性', ledgers.map((l) => g1Structure(l.entries, l.label))),
-    merge('G2', '哈希链', ledgers.map((l) => g2HashChain(l.entries, l.label, anchors[l.label] ?? null))),
-    merge('G3', '概率量化', ledgers.map((l) => g3Probability(l.entries, l.label))),
-    merge('G4', '开赛锁定', ledgers.map((l) => g4Lock(l.entries, l.label))),
-    merge('G5', '覆盖率', ledgers.map((l) => g5Coverage(l.entries, l.label, { expectedIds: l.expectedIds ?? null, now }))),
-    g6Registry(registry, anchors.registry ?? null),
-    g7Recompute(registry),
-    g8DataQuality({ ...dataQuality, now }),
+    merge('G2', '字段序', ledgers.map((l) => g2FieldOrder(l.entries, l.label))),
+    g3ClauseCompliance(registry, anchors.registry ?? null),
+    merge('G4', '概率量化', ledgers.map((l) => g4Probability(l.entries, l.label))),
+    merge('G5', '跨批回归', [...ledgers.map((l) => g5HashChain(l.entries, l.label, anchors[l.label] ?? null)), g5Recompute(registry)]),
+    merge('G6', '覆盖率', ledgers.map((l) => g6Coverage(l.entries, l.label, { expectedIds: l.expectedIds ?? null, now }))),
+    g7Foolproof({ ledgers, registry, now, dataQuality }),
   ];
   return { ok: results.every((r) => r.ok), gates: results };
 }

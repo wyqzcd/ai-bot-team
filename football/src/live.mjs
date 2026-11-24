@@ -6,7 +6,7 @@
  * 每个 plan 返回待追加的条目；写盘前统一用 G1~G4 对"追加后的台账"预检，任一 ERROR 拒绝写入。
  */
 import { LEAGUES } from './dataset.mjs';
-import { MIN_RESULT_MINUTES, g1Structure, g2HashChain, g3Probability, g4Lock } from './gates.mjs';
+import { MIN_RESULT_MINUTES, g1Structure, g5HashChain, g4Probability, checkLock } from './gates.mjs';
 import { foldLedger, predictionEntry, resultEntry, retractionEntry, seal } from './ledger.mjs';
 import { DEFAULT_PARAMS } from './poisson.mjs';
 import { MODEL_NAME, MODEL_VERSION, fitModel, predictMatch } from './walkforward.mjs';
@@ -62,7 +62,7 @@ export function precheckAppend(existing, additions) {
     return previous;
   });
   const combined = [...existing, ...sealed];
-  const problems = [g1Structure(combined, 'live'), g2HashChain(combined, 'live'), g3Probability(combined, 'live'), g4Lock(combined, 'live')].flatMap((g) => g.errors);
+  const problems = [g1Structure(combined, 'live'), g5HashChain(combined, 'live'), g4Probability(combined, 'live'), checkLock(combined, 'live')].flatMap((g) => g.errors);
   if (problems.length) throw new LiveError(`预检未通过，拒绝写入：\n  ${problems.join('\n  ')}`);
   return sealed;
 }

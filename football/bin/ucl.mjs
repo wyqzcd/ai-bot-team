@@ -17,17 +17,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PATHS } from '../src/config.mjs';
-import { FOOTBALL_ROOT } from '../src/dataset.mjs';
 import { loadEloLatest, loadEloModel, predictElo } from '../src/elo.mjs';
 import { appendEntries, foldLedger, predictionEntry, readLedger } from '../src/ledger.mjs';
 import { LiveError, precheckAppend } from '../src/live.mjs';
+import { UCL_SNAPSHOT_DIR, UEFA_MATCHES_URL, eloNames, loadUefaTeamMap, uclMatchId } from '../src/ucl.mjs';
 import { CliError, now, parseArgs, run } from '../src/cli.mjs';
 
 export const MAX_ELO_AGE_DAYS = 120;
 const UCL_LEDGER = PATHS.uclLedger;
-const SNAPSHOT_DIR = path.join(FOOTBALL_ROOT, 'fixtures', 'ucl');
-const TEAM_MAP = path.join(FOOTBALL_ROOT, 'data', 'uefa-teams.json');
-const UEFA_URL = (date) => `https://match.uefa.com/v5/matches?competitionId=1&fromDate=${date}&toDate=${date}&order=ASC&offset=0&limit=50`;
+const SNAPSHOT_DIR = UCL_SNAPSHOT_DIR;
+const UEFA_URL = UEFA_MATCHES_URL;
 const PICK = { h: '主胜', d: '平', a: '客胜' };
 
 async function fetchSnapshot(date) {
@@ -66,7 +65,7 @@ run(async () => {
   }
   if (!existsSync(snapshotFile)) throw new CliError(`没有快照 ${snapshotFile}，先加 --fetch`, 3);
   const snapshot = JSON.parse(readFileSync(snapshotFile, 'utf8'));
-  const teamMap = JSON.parse(readFileSync(TEAM_MAP, 'utf8')).teams;
+  const teamMap = loadUefaTeamMap();
   const elo = loadEloLatest();
   const params = loadEloModel();
   const ledger = args.ledger ? path.resolve(args.ledger) : UCL_LEDGER;
@@ -76,7 +75,7 @@ run(async () => {
   const additions = [];
   for (const m of snapshot.matches) {
     const label = `${m.kickoff} ${m.home.name} vs ${m.away.name}`;
-    const names = [m.home, m.away].map((t) => teamMap[t.id]?.elo ?? null);
+    const names = eloNames(m, teamMap);
     if (names.includes(null)) {
       console.log(`  [不出预测] ${label}：Elo 快照里没有 ${[m.home, m.away].filter((_, i) => !names[i]).map((t) => t.name).join('、')}`);
       continue;
@@ -87,7 +86,7 @@ run(async () => {
       console.log(`  [不出预测] ${label}：Elo 过旧（${stale.map(({ n, r }) => `${n} ${r.date}`).join('、')}，上限 ${MAX_ELO_AGE_DAYS} 天）`);
       continue;
     }
-    const id = `UCL|${m.kickoff.slice(0, 10)}|${names[0]}|${names[1]}`;
+    const id = uclMatchId(m, names);
     if (existing.get(id)?.prediction) {
       console.log(`  [已预测] ${label} #${existing.get(id).prediction.seq}`);
       continue;

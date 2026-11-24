@@ -1,0 +1,59 @@
+# 样本库每周刷新：每周一 03:17 UTC 下载原始数据，用 build-dataset 重建 big5.csv / elo-latest.csv / manifest.json。
+# 有变化才开 PR 交人工审（样本库属于低风险目录，但同批会更新发布锚点等高风险文件时仍需人工 review）。
+# 不刷新的后果：样本库超过 120 天 G8 阻断、欧冠候选因 Elo 过旧停出预测——闭环会自己停下来。
+# 回测窗口上界固定（BACKTEST_TO），刷新样本库不会让现有回测台账"缺场"；要把新比赛纳入回测，需另行生成新版本台账。
+name: 足球样本库刷新
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 下载原始数据并重建样本库
+        run: |
+          RAW_URL="https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data-2000-2025/main/data/Matches.csv"
+          mkdir -p "$RUNNER_TEMP/raw"
+          curl -sSfL -o "$RUNNER_TEMP/raw/Matches.csv" "$RAW_URL"
+          node football/bin/build-dataset.mjs --raw "$RUNNER_TEMP/raw/Matches.csv" --source-url "$RAW_URL"
+
+      - name: 有变化吗
+        id: changed
+        run: |
+          if [ -n "$(git status --porcelain football/data)" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; else echo "样本库无变化，结束。"; echo "yes=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: 门禁与测试
+        if: steps.changed.outputs.yes == 'true'
+        run: |
+          node football/bin/gates.mjs
+          (cd demo && npm test)
+          (cd football && npm test)
+
+      - name: 开 PR 交人工审
+        if: steps.changed.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+        run: |
+          BRANCH="bot/football-data-refresh-$(date -u +%F)-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add football/data
+          git commit -m "chore(football): 刷新样本库（$(jq -r '.source.to' football/data/manifest.json)）"
+          git push origin "$BRANCH"
+          BODY="每周样本库刷新：原始文件 sha256 $(jq -r '.source.sha256' football/data/manifest.json)，截至 $(jq -r '.source.to' football/data/manifest.json)。G8 数据质量与测试已通过。"
+          gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY" --label bot-authored \
+            || gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY"

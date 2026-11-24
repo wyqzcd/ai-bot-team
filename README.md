@@ -45,6 +45,7 @@ ai-bot-team/
 ├── .github/workflows/
 │   ├── bot-dispatch.yml       # CI 里的 Bot（issue 触发/手动触发）
 │   └── verify-and-merge.yml   # 校验 + 评分 + 渐进自动合并
+├── football/                  # 可复算的泊松足球分析流水线（台账/门禁/规则登记，见 football/README.md）
 └── demo/                      # 演示项目（Node.js 小工具，含测试）
 ```
 

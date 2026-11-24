@@ -1,0 +1,133 @@
+{
+  "source": "https://match.uefa.com/v5/matches?competitionId=1&fromDate=2026-11-24&toDate=2026-11-24&order=ASC&offset=0&limit=50",
+  "fetchedAt": "2026-11-24T14:17:07Z",
+  "date": "2026-11-24",
+  "matches": [
+    {
+      "uefaMatchId": "2049629",
+      "kickoff": "2026-11-24T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "59333",
+        "name": "Bodø/Glimt"
+      },
+      "away": {
+        "id": "63405",
+        "name": "LASK"
+      }
+    },
+    {
+      "uefaMatchId": "2049631",
+      "kickoff": "2026-11-24T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50067",
+        "name": "Galatasaray"
+      },
+      "away": {
+        "id": "52683",
+        "name": "Aston Villa"
+      }
+    },
+    {
+      "uefaMatchId": "2049625",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50051",
+        "name": "Real Madrid"
+      },
+      "away": {
+        "id": "50062",
+        "name": "PSV"
+      }
+    },
+    {
+      "uefaMatchId": "2049626",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52919",
+        "name": "Man City"
+      },
+      "away": {
+        "id": "50136",
+        "name": "Napoli"
+      }
+    },
+    {
+      "uefaMatchId": "2049627",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52280",
+        "name": "Arsenal"
+      },
+      "away": {
+        "id": "52758",
+        "name": "B. Dortmund"
+      }
+    },
+    {
+      "uefaMatchId": "2049628",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52749",
+        "name": "Feyenoord"
+      },
+      "away": {
+        "id": "50064",
+        "name": "Porto"
+      }
+    },
+    {
+      "uefaMatchId": "2049630",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "2603790",
+        "name": "Leipzig"
+      },
+      "away": {
+        "id": "52277",
+        "name": "Lens"
+      }
+    },
+    {
+      "uefaMatchId": "2049632",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52797",
+        "name": "S. Bratislava"
+      },
+      "away": {
+        "id": "52265",
+        "name": "Real Betis"
+      }
+    },
+    {
+      "uefaMatchId": "2049633",
+      "kickoff": "2026-11-24T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "79946",
+        "name": "Como"
+      },
+      "away": {
+        "id": "50129",
+        "name": "AEK Athens"
+      }
+    }
+  ]
+}

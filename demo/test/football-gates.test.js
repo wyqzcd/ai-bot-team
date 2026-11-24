@@ -50,3 +50,29 @@ test('G8：样本库超过 30 天提示，超过 120 天阻断', () => {
   assert.match(stale.warnings.join(), /距今 82 天/);
   assert.match(checkDataQuality({ now: '2027-01-15T00:00:00Z' }).errors.join(), /超过 120 天上限/);
 });
+
+// ---------- G6 候选到期裁决 ----------
+import { checkRegistry } from '../../football/src/rules.mjs';
+import { seal } from '../../football/src/ledger.mjs';
+
+function candidateLedger(n) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'review-'));
+  const file = path.join(dir, 'l.jsonl');
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    const id = `E0|2026-01-${String(10 + i).padStart(2, '0')}|A${i}|B${i}`;
+    const kickoff = `2026-01-${String(10 + i).padStart(2, '0')}T15:00:00Z`;
+    out.push(seal({ type: 'prediction', id, league: 'E0', kickoff, home: `A${i}`, away: `B${i}`, createdAt: `2026-01-${String(10 + i).padStart(2, '0')}T00:00:00Z`, mode: 'live', model: 't', lam: [1.5, 1], probs: [0.6, 0.25, 0.15], pick: 'h', conf: 0.6, over25: 0.5, totals: [0.2, 0.5, 0.3], top3: [['1-0', 0.1], ['1-1', 0.09], ['2-0', 0.08]], known: true, market: null }, out.at(-1) ?? null));
+    out.push(seal({ type: 'result', id, ft: [1, 0], ht: null, recordedAt: `2026-01-${String(10 + i).padStart(2, '0')}T17:00:00Z`, source: 't' }, out.at(-1)));
+  }
+  writeFileSync(file, `${out.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  return file;
+}
+const candidate = (file, extra = {}) => ({ id: 'R-950', title: 't', status: 'candidate', definition: 'd', sample: { ledger: file, filter: { mode: 'live' } }, recompute: 'x', claim: null, ...extra });
+
+test('G6：候选规则必须登记裁决阈值；样本攒够必须裁决', () => {
+  const file = candidateLedger(3);
+  assert.match(checkRegistry({ rules: [candidate(file)] }, { recompute: false }).errors.join(), /必须登记裁决阈值/);
+  assert.deepEqual(checkRegistry({ rules: [candidate(file, { reviewAt: { n: 4 } })] }, { recompute: false }).errors, []);
+  assert.match(checkRegistry({ rules: [candidate(file, { reviewAt: { n: 3 } })] }, { recompute: false }).errors.join(), /样本已达 n=3 ≥ 3，必须裁决/);
+});

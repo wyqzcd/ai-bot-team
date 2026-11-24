@@ -96,7 +96,10 @@
       "recompute": "node football/bin/stats.mjs --ledger football/ledger/live.jsonl --filter '{\"mode\":\"live\",\"minConf\":0.53}'",
       "claim": null,
       "note": "实盘样本尚未积累，没有可复算的 claim，只能是候选。积累到 n ≥ 200 后再登记 claim 并申请转 active。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "reviewAt": {
+        "n": 200
+      }
     },
     {
       "id": "R-005",
@@ -315,7 +318,10 @@
       "recompute": "node football/bin/stats.mjs --ledger football/ledger/ucl-candidate.jsonl --filter '{\"mode\":\"live\"}'",
       "claim": null,
       "note": "模型只在联赛内比赛上校准过，没有任何欧冠样本回测；欧冠主场优势、强弱分布与联赛不同。Elo 快照截至 2026-08-30 前后，比赛日已旧约 3 个月；伤停、首发未进模型。只能作为候选记录，不作结论。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "reviewAt": {
+        "n": 100
+      }
     }
   ]
 }

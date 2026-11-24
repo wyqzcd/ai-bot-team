@@ -90,6 +90,14 @@ export function checkRegistry(registry, { recompute = true } = {}) {
       }
     } else if (effective === 'candidate' && rule.status === 'candidate') {
       warnings.push(`${tag}: 候选规则（缺 ${missing.length ? missing.join('/') : '可复算的 claim'}），不得作为结论发布`);
+      // 候选规则必须登记裁决阈值；样本攒够了就必须裁决（转 active 并登记 claim，或撤回），不许无限期挂着。
+      if (!Number.isInteger(rule.reviewAt?.n) || rule.reviewAt.n < 1) {
+        errors.push(`${tag}: 候选规则必须登记裁决阈值 reviewAt.n（样本达到多少场必须裁决）`);
+      } else if (!missing.includes('sample')) {
+        const n = computeStats(ledgerFor(rule), rule.sample.filter).n;
+        row.sampleN = n;
+        if (n >= rule.reviewAt.n) errors.push(`${tag}: 候选规则样本已达 n=${n} ≥ ${rule.reviewAt.n}，必须裁决：转 active 并登记可复算的 claim，或撤回`);
+      }
     }
     rules.push(row);
   }

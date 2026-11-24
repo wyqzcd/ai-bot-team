@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>足球泊松台账</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --card:#ffffff; --ok:#2f7a4a; --bad:#b3402e; --accent:#2c5d8f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151514; --fg:#ecebe6; --muted:#9d9b94; --line:#2f2e2b; --card:#1d1d1b; --ok:#6cc08b; --bad:#e8836f; --accent:#8ab8e6; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+main { max-width:1040px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+.muted { color:var(--muted); font-size:13px; } .ok { color:var(--ok); } .bad { color:var(--bad); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin:12px 0; }
+.scroll { overflow-x:auto; } table { border-collapse:collapse; width:100%; font-size:14px; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:600; white-space:nowrap; }
+code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { list-style:none; padding:0; display:flex; flex-wrap:wrap; gap:6px 18px; margin:0; }
+</style>
+</head>
+<body><main>
+<h1>足球泊松台账 · 发布页</h1>
+<div class="muted">生成于 2026-11-24T13:00:00Z · 模型 dc-poisson@1.0.0 · 五大联赛（英超 / 西甲 / 意甲 / 德甲 / 法甲）</div>
+
+<div class="card"><b>7 道机械门禁</b>：<span class="ok">全部通过</span><ul class="gates"><li class="ok">✔ G1 结构完整性</li><li class="ok">✔ G2 哈希链</li><li class="ok">✔ G3 概率量化</li><li class="ok">✔ G4 开赛锁定</li><li class="ok">✔ G5 覆盖率</li><li class="ok">✔ G6 规则登记 <span class="muted">（1 条提示）</span></li><li class="ok">✔ G7 复算一致</li></ul></div>
+
+<div class="card"><b>怎么读这些数字</b>：方向 = 胜/平/负三选一。每个命中率都必须和<b>样本量 n、覆盖率、同样本的市场热门命中</b>一起看。
+五大联赛赛前赔率热门全样本只命中约 53.6%；任何高于此的数字都只是"挑了更一边倒的比赛"，覆盖率会相应下降。</div>
+
+<h2>已登记结论（active 规则，现场复算）</h2>
+<div class="scroll"><table><thead><tr><th>规则</th><th>复算命中</th><th>n</th><th>覆盖率</th><th>同样本·市场热门</th><th>同样本·永远主胜</th><th>复算命令</th></tr></thead><tbody><tr><td><b>R-001</b><br><span class="muted">全样本方向命中（不筛选，作为对照锚点）</span></td><td><b>52.23%</b></td><td>12557</td><td>100.00%</td><td>53.61%</td><td>43.12%</td><td><code>node football/bin/stats.mjs --rule R-001</code></td></tr><tr><td><b>R-002</b><br><span class="muted">高置信档（模型最大概率 ≥ 0.56）方向命中，留出段</span></td><td><b>67.27%</b></td><td>1103</td><td>30.62%</td><td>67.45%</td><td>53.58%</td><td><code>node football/bin/stats.mjs --rule R-002</code></td></tr><tr><td><b>R-003</b><br><span class="muted">全样本比分 TOP3 命中</span></td><td><b>32.23%</b></td><td>12557</td><td>100.00%</td><td><span class="muted">—（基线只对方向）</span></td><td><span class="muted">—</span></td><td><code>node football/bin/stats.mjs --rule R-003</code></td></tr></tbody></table></div>
+
+<h2>置信度-覆盖率曲线（留出段 2024-07 起）</h2>
+<div class="scroll"><table><thead><tr><th>conf ≥</th><th>n</th><th>覆盖率</th><th>模型方向命中</th><th>同样本·市场热门</th></tr></thead><tbody><tr><td>0.40</td><td>3013</td><td>83.65%</td><td>54.33%</td><td>55.79%</td></tr><tr><td>0.45</td><td>2303</td><td>63.94%</td><td>59.01%</td><td>59.49%</td></tr><tr><td>0.50</td><td>1712</td><td>47.53%</td><td>61.86%</td><td>62.32%</td></tr><tr><td>0.55</td><td>1187</td><td>32.95%</td><td>66.13%</td><td>66.30%</td></tr><tr><td>0.60</td><td>787</td><td>21.85%</td><td>70.27%</td><td>70.39%</td></tr><tr><td>0.65</td><td>481</td><td>13.35%</td><td>75.68%</td><td>75.68%</td></tr><tr><td>0.70</td><td>267</td><td>7.41%</td><td>79.78%</td><td>79.78%</td></tr></tbody></table></div>
+
+<h2>实盘：待开赛预测（开赛即锁定）</h2>
+<div class="scroll"><table><thead><tr><th>开赛 (UTC)</th><th>联赛</th><th>对阵</th><th>方向</th><th>conf</th><th>胜/平/负</th><th>λ</th><th>比分 TOP3</th><th>#</th></tr></thead><tbody><tr><td colspan="9" class="muted">（无）</td></tr></tbody></table></div>
+
+<h2>实盘战绩</h2>
+<div class="card">已结算 0 场 · 方向命中 — · 同样本市场热门 —（n=0） · 比分 TOP3 —
+<br><span class="muted">实盘样本 &lt; 200，命中率波动很大，只作记录，不作结论（见候选规则 R-004）。</span></div>
+
+<h2>赛后归因（机械分类）</h2>
+<div class="scroll"><table><thead><tr><th>原因</th><th>实盘</th><th>回测高置信档（留出段）</th></tr></thead><tbody><tr><td>平局盲区（赛果平、模型未选平）</td><td>0</td><td>222</td></tr><tr><td>同向爆冷（模型与市场同向且都错）</td><td>0</td><td>137</td></tr><tr><td>模型逆市场且错（优先排查）</td><td>0</td><td>2</td></tr><tr><td>模型逆市场，两者都错</td><td>0</td><td>0</td></tr><tr><td>无赔率，无法对照</td><td>0</td><td>0</td></tr></tbody></table></div>
+
+<h2>撤回留痕</h2>
+<div class="scroll"><table><thead><tr><th>对象</th><th>撤回日期</th><th>原因</th></tr></thead><tbody><tr><td>规则 R-005：高置信档（conf ≥ 0.55）全样本方向命中 65.7%</td><td>2026-11-24</td><td>阈值 0.55 是看着全样本（含 2024-07 之后）的曲线挑的，属于数据窥探，命中率会被高估。以 R-002（训练段选阈值、留出段报告）替代。</td></tr></tbody></table></div>
+
+<h2>候选规则（不作结论）</h2>
+<div class="scroll"><table><thead><tr><th>规则</th><th>缺什么</th><th>说明</th></tr></thead><tbody><tr><td>R-004 实盘高置信档（conf ≥ 0.56）方向命中</td><td>可复算的 claim</td><td>实盘样本尚未积累，没有可复算的 claim，只能是候选。积累到 n ≥ 200 后再登记 claim 并申请转 active。</td></tr></tbody></table></div>
+
+<p class="muted">数据：football-data.co.uk 口径的公开赛果与赛前赔率（经 xgabora/Club-Football-Match-Data-2000-2025 汇编）。赔率只用于对照基线，不进模型。本页仅为统计方法演示，不构成任何投注建议。</p>
+</main></body>
+</html>

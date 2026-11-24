@@ -1,0 +1,67 @@
+/**
+ * 样本库：五大联赛逐场赛果 + 赛前赔率（赔率只用于对照基线，不进模型）。
+ * 口径：一行一场；kickoff 用比赛日 + 开球时间（数据源为当地时间，缺省 12:00），
+ * 只用于"预测必须早于开赛"的锁定判断，不参与建模。
+ */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseCsv } from './csv.mjs';
+
+export const FOOTBALL_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+export const DEFAULT_DATASET = path.join(FOOTBALL_ROOT, 'data', 'big5.csv');
+
+export const LEAGUES = {
+  E0: '英超',
+  SP1: '西甲',
+  I1: '意甲',
+  D1: '德甲',
+  F1: '法甲',
+};
+
+export const DATASET_COLUMNS = [
+  'league', 'date', 'time', 'home', 'away',
+  'fthg', 'ftag', 'hthg', 'htag',
+  'odd_h', 'odd_d', 'odd_a', 'odd_over25', 'odd_under25',
+];
+
+function num(value) {
+  if (value === '' || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function matchId(row) {
+  return `${row.league}|${row.date}|${row.home}|${row.away}`;
+}
+
+export function kickoffOf(date, time) {
+  const hhmm = /^\d{2}:\d{2}/.test(time ?? '') ? time.slice(0, 5) : '12:00';
+  return `${date}T${hhmm}:00Z`;
+}
+
+/** 把数据集一行转成内部比赛对象；赛果/赔率缺失置 null，由调用方决定是否可用。 */
+export function toMatch(row) {
+  const fthg = num(row.fthg);
+  const ftag = num(row.ftag);
+  const odds = [num(row.odd_h), num(row.odd_d), num(row.odd_a)];
+  return {
+    id: matchId(row),
+    league: row.league,
+    date: row.date,
+    kickoff: kickoffOf(row.date, row.time),
+    home: row.home,
+    away: row.away,
+    ft: fthg === null || ftag === null ? null : { h: fthg, a: ftag },
+    ht: num(row.hthg) === null || num(row.htag) === null ? null : { h: num(row.hthg), a: num(row.htag) },
+    odds: odds.every((value) => value !== null && value > 1) ? odds : null,
+    oddsOU: num(row.odd_over25) && num(row.odd_under25) ? [num(row.odd_over25), num(row.odd_under25)] : null,
+  };
+}
+
+export function loadDataset(file = DEFAULT_DATASET) {
+  const rows = parseCsv(readFileSync(file, 'utf8'));
+  const matches = rows.map(toMatch);
+  matches.sort((a, b) => (a.kickoff < b.kickoff ? -1 : a.kickoff > b.kickoff ? 1 : a.id < b.id ? -1 : 1));
+  return matches;
+}

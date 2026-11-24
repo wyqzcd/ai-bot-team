@@ -1,0 +1,12 @@
+{
+  "publishedAt": "2026-11-24T13:00:00Z",
+  "report": "../reports/2026-11-24.html",
+  "backtest": {
+    "entries": 25114,
+    "lastHash": "f1cd7941793589b9"
+  },
+  "live": {
+    "entries": 0,
+    "lastHash": null
+  }
+}

@@ -189,6 +189,22 @@ CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的�
 | G7 复算一致 | active 与撤回规则的数字现场复算 |
 | G8 数据质量 | 样本库与 `data/manifest.json` 指纹一致（不许手改）；同联赛去标点后同名的不同写法 = 队名分裂；行级校验（重复、比分、赔率、射正、Elo）；样本库超 30 天提示、超 120 天阻断 |
 
+## 上线与定时运转
+
+| 工作流 | 何时运行 | 做什么 |
+|---|---|---|
+| `football-pages.yml` | 推到 main 且改了 `football/**` | 8 道门禁通过才把 `football/reports/` 部署到 GitHub Pages（首页 = 最新发布页）；门禁不过不上线 |
+| `football-matchday.yml` | 每天 12:07 UTC（北京时间 20:07） | 录前一天欧冠赛果 → 抓当天欧冠赛程并出候选预测 → 门禁、测试、发布 → 开 PR 交人工审；台账没变化就什么都不做；上一个比赛日 PR 未合并时接在它上面继续（滚动 PR），避免哈希链冲突 |
+| `football-data-refresh.yml` | 每周一 03:17 UTC | 下载原始数据重建样本库与指纹清单，有变化就开 PR；不刷新的话 G8 会在样本库超 120 天时阻断，欧冠候选也会因 Elo 过旧停出 |
+| `verify-and-merge.yml` | 每个 PR | 单测 + 用真实时间跑 8 道门禁，任一失败 `verify` 变红 |
+
+需要在仓库设置里打开的开关：
+1. Settings → Pages → Build and deployment → Source 选 **GitHub Actions**（公开仓库的 Pages 是公开网页）。
+2. Settings → Actions → General → Workflow permissions 勾选 **Allow GitHub Actions to create and approve pull requests**。
+3. 可选：Secret `BOT_PAT`。用默认令牌开的 PR 不会触发其他工作流（GitHub 的限制），配了它，比赛日 PR 才会自动跑 `verify-and-merge`。
+
+定时工作流只在默认分支上运行，本模块合并到 main 后才开始转。竞彩不在 CI 里跑（官方接口海外不可达），仍需本地执行 `jczq-board --live` + `jczq.mjs`。
+
 ## 局限
 
 - 只建模五大联赛；竞彩的其他联赛（荷乙、日职、欧国联等）不出预测。

@@ -40,9 +40,9 @@ run(async () => {
     home: { id: m.homeTeam.id, name: m.homeTeam.internationalName },
     away: { id: m.awayTeam.id, name: m.awayTeam.internationalName },
   }));
-  if (!args['dry-run']) {
-    mkdirSync(UCL_SNAPSHOT_DIR, { recursive: true });
-    writeFileSync(path.join(UCL_SNAPSHOT_DIR, `${args.date}.results.json`), `${JSON.stringify({ source: UEFA_MATCHES_URL(args.date), fetchedAt: at, matches }, null, 2)}\n`);
+  if (!matches.length) {
+    console.log(`${args.date} 没有欧冠比赛。`);
+    return;
   }
 
   const teamMap = loadUefaTeamMap();
@@ -68,7 +68,12 @@ run(async () => {
       throw error;
     }
   }
-  if (added.length && !args['dry-run']) appendEntries(PATHS.uclLedger, added.map(({ seq, prev, hash, ...rest }) => rest));
+  if (added.length && !args['dry-run']) {
+    appendEntries(PATHS.uclLedger, added.map(({ seq, prev, hash, ...rest }) => rest));
+    // 赛果快照只在确实录入了赛果时写，作为录入依据；重跑不会产生无意义的改动。
+    mkdirSync(UCL_SNAPSHOT_DIR, { recursive: true });
+    writeFileSync(path.join(UCL_SNAPSHOT_DIR, `${args.date}.results.json`), `${JSON.stringify({ source: UEFA_MATCHES_URL(args.date), fetchedAt: at, matches }, null, 2)}\n`);
+  }
 
   console.log(`本次录入 ${added.length} 场${args['dry-run'] ? '（dry-run，未写入）' : ''}`);
   for (const item of foldLedger(entries).filter((x) => x.prediction).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : 1))) {

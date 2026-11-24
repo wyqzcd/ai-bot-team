@@ -6,7 +6,7 @@
  * 不进入结论、不计入实盘规则 R-004。
  *
  * 用法：
- *   node football/bin/ucl.mjs --fetch --date 2026-11-24   抓 UEFA 官方当天赛程，存 football/fixtures/ucl/<date>.json（精简快照）
+ *   node football/bin/ucl.mjs --fetch --date 2026-11-24   抓 UEFA 官方当天赛程，存 football/fixtures/ucl/<date>.json（精简快照；已存在不覆盖，--refresh 强制重抓）
  *   node football/bin/ucl.mjs --date 2026-11-24 [--dry-run]   读快照，出预测并写候选台账
  *
  * 口径（出预测前固定）：
@@ -53,17 +53,32 @@ async function fetchSnapshot(date) {
 }
 
 run(async () => {
-  const args = parseArgs(process.argv.slice(2), { flags: ['fetch', 'dry-run'], options: ['date', 'ledger'] });
+  const args = parseArgs(process.argv.slice(2), { flags: ['fetch', 'refresh', 'dry-run', 'skip-missing'], options: ['date', 'ledger'] });
   if (!args.date || !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new CliError('需要 --date YYYY-MM-DD');
   const snapshotFile = path.join(SNAPSHOT_DIR, `${args.date}.json`);
   if (args.fetch) {
+    // 快照是出预测时的依据（赛前证据），已存在就不覆盖；确需重抓加 --refresh。
+    if (existsSync(snapshotFile) && !args.refresh) {
+      console.log(`${path.relative(process.cwd(), snapshotFile)} 已存在，保留原快照（重抓请加 --refresh）。`);
+      return;
+    }
     const snapshot = await fetchSnapshot(args.date);
+    if (!snapshot.matches.length) {
+      console.log(`${args.date} 没有欧冠比赛，不写快照。`);
+      return;
+    }
     mkdirSync(SNAPSHOT_DIR, { recursive: true });
     writeFileSync(snapshotFile, `${JSON.stringify(snapshot, null, 2)}\n`);
     console.log(`已保存 ${snapshot.matches.length} 场到 ${path.relative(process.cwd(), snapshotFile)}`);
     return;
   }
-  if (!existsSync(snapshotFile)) throw new CliError(`没有快照 ${snapshotFile}，先加 --fetch`, 3);
+  if (!existsSync(snapshotFile)) {
+    if (args['skip-missing']) {
+      console.log(`没有 ${args.date} 的快照，跳过。`);
+      return;
+    }
+    throw new CliError(`没有快照 ${snapshotFile}，先加 --fetch`, 3);
+  }
   const snapshot = JSON.parse(readFileSync(snapshotFile, 'utf8'));
   const teamMap = loadUefaTeamMap();
   const elo = loadEloLatest();

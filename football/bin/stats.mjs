@@ -8,12 +8,11 @@
  *   node football/bin/stats.mjs --curve [--filter ...]  置信度-覆盖率曲线
  *   node football/bin/stats.mjs --review --filter '{"from":"2026-08-01"}'   赛后归因
  */
-import path from 'node:path';
 import { PATHS } from '../src/config.mjs';
 import { readLedger } from '../src/ledger.mjs';
 import { computeStats, coverageCurve, review } from '../src/metrics.mjs';
 import { RATE_TOLERANCE, checkRegistry, effectiveStatus, loadRegistry, recomputeRule } from '../src/rules.mjs';
-import { CliError, parseArgs, run } from '../src/cli.mjs';
+import { CliError, parseArgs, resolveInput, run } from '../src/cli.mjs';
 
 run(async () => {
   const args = parseArgs(process.argv.slice(2), { flags: ['all', 'curve', 'review', 'details'], options: ['rule', 'filter', 'ledger', 'registry'] });
@@ -44,7 +43,7 @@ run(async () => {
       throw new CliError(`--filter 不是合法 JSON：${error.message}`);
     }
   }
-  const entries = readLedger(args.ledger ? path.resolve(args.ledger) : PATHS.backtestLedger);
+  const entries = readLedger(args.ledger ? resolveInput(args.ledger) : PATHS.backtestLedger);
   if (args.curve) console.log(JSON.stringify(coverageCurve(entries, filter), null, 2));
   else if (args.review) {
     const result = review(entries, filter);

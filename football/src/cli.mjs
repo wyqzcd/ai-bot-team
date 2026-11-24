@@ -1,4 +1,16 @@
-/** CLI 小工具：参数解析 + 统一的"可复现当前时间"。 */
+/** CLI 小工具：参数解析 + 统一的"可复现当前时间" + 统一的台账路径解析。 */
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const FOOTBALL_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+/** 路径参数：先按当前目录解析，找不到再按 football/ 目录解析（两种写法都可以）。 */
+export function resolveInput(p) {
+  const fromCwd = path.resolve(p);
+  if (existsSync(fromCwd)) return fromCwd;
+  return path.resolve(FOOTBALL_DIR, p);
+}
 export function parseArgs(argv, { flags = [], options = [] } = {}) {
   const out = { _: [] };
   for (let index = 0; index < argv.length; index += 1) {

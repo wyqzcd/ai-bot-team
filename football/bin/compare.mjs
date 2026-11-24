@@ -6,13 +6,12 @@
  * - 对数损失的配对差及 z 值（逐场配对，差 = 新版 log p − 旧版 log p，正数表示新版更好）。
  *
  * 用法：node football/bin/compare.mjs --a ledger/backtest-v2.jsonl --b ledger/backtest-v3.jsonl [--from 2024-07-01] [--to YYYY-MM-DD]
- * 路径相对 football/ 目录。
+ * 路径可以相对当前目录，也可以相对 football/ 目录。
  */
-import path from 'node:path';
-import { FOOTBALL_ROOT } from '../src/dataset.mjs';
+import { existsSync } from 'node:fs';
 import { foldLedger, readLedger } from '../src/ledger.mjs';
 import { computeStats, outcomeOf } from '../src/metrics.mjs';
-import { CliError, parseArgs, run } from '../src/cli.mjs';
+import { CliError, parseArgs, resolveInput, run } from '../src/cli.mjs';
 
 const COVERAGES = [0.2, 0.3, 0.35, 0.45];
 const r4 = (x) => Math.round(x * 1e4) / 1e4;
@@ -21,7 +20,11 @@ run(async () => {
   const args = parseArgs(process.argv.slice(2), { options: ['a', 'b', 'from', 'to'] });
   if (!args.a || !args.b) throw new CliError('需要 --a <旧台账> --b <新台账>');
   const filter = { mode: 'backtest', ...(args.from && { from: args.from }), ...(args.to && { to: args.to }) };
-  const load = (f) => readLedger(path.resolve(FOOTBALL_ROOT, f));
+  const load = (f) => {
+    const file = resolveInput(f);
+    if (!existsSync(file)) throw new CliError(`台账不存在：${f}`, 3);
+    return readLedger(file);
+  };
   const ledgers = { a: load(args.a), b: load(args.b) };
   const settled = (entries) => new Map(foldLedger(entries)
     .filter((x) => x.prediction && x.result && (!filter.from || x.prediction.kickoff.slice(0, 10) >= filter.from) && (!filter.to || x.prediction.kickoff.slice(0, 10) <= filter.to))

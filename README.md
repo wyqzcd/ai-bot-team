@@ -55,8 +55,6 @@ ai-bot-team/
 
 ```powershell
 npm install -g @anthropic-ai/claude-code
-# 国内用户（推荐路线）：配 DeepSeek 官方 Anthropic 兼容端点，-Persist 写入 $PROFILE 永久生效
-powershell -ExecutionPolicy Bypass -File scripts/setup-deepseek.ps1 -Persist
 # Windows：
 powershell -ExecutionPolicy Bypass -File scripts/install-pstack.ps1
 # Linux/macOS：
@@ -86,9 +84,9 @@ claude
 GitHub 仓库配置：
 
 - Secrets：
-  - 海外 Claude：`ANTHROPIC_API_KEY`
-  - 国内：`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`（DeepSeek/GLM/Kimi 的 Anthropic 兼容端点，见下方"国内使用指南"）
-- Variables：`AUTO_MERGE`（`"true"` 才允许真实合并）、`QA_AGENT_ENABLED`（`"true"` 才在 CI 里跑 pstack QA Agent）、`BOT_DISPATCH_ON_ISSUE`（`"true"` 才让新 issue 自动触发 Bot）、`AGENT_MODEL`（可选，指定模型名如 `deepseek-v4-pro`）
+  - `ANTHROPIC_API_KEY`（可选，官方 Claude）：CI 里的首席 Bot 派活需要它；没有就跳过派活。CI 的验证不需要任何模型 key。
+  - `BOT_PAT`（可选）：让 Bot / 比赛日工作流开的 PR 也自动触发 `verify-and-merge`。
+- Variables：`AUTO_MERGE`（`"true"` 才允许真实合并）、`QA_AGENT_ENABLED`（`"true"` 才额外跑可选的 Claude QA Agent，只作参考）、`BOT_DISPATCH_ON_ISSUE`（`"true"` 才让新 issue 自动触发 Bot）
 
 ### 第 3 步：渐进放权路线图
 
@@ -108,7 +106,7 @@ GitHub 仓库配置：
 ```
 基础分 60
 + CI 全绿 +15（未通过 -40）
-+ pstack 验证报告通过 +10（缺失 -10）
++ 复现验证通过 +10（失败 -10）：CI 用 PR 的代码和样本库重算回测台账与模型参数，必须与提交的文件逐字节一致，并复算全部登记规则
 + 任务类型调整（docs +20 / test +15 / fix +10 / chore +5 / feat -5 / refactor -10）
 + 目录风险调整（low +8 / medium -5 / high -15，取改动中最高风险文件）
 + 改动量在安全上限内 +5（超限每项 -10）
@@ -132,38 +130,18 @@ node scripts/trust-score.mjs score-pr 12 --format markdown
 
 评分规则全在 `config/trust.json`，改配置不需要改代码。建议每两周回看一次：被人工驳回的 bot PR，用 `/bot-review` 的结论去调 `directories` 或 `levels`，这就是"越用越敢放权"的抓手。
 
-## 国内使用指南（Claude 官方 API 不可用时）
+## 没有 Claude API Key 时
 
-Claude Code 本体可以正常安装，只是 Anthropic 官方 API 在大陆不可用。三条路线，按推荐排序：
+本模板不再使用任何第三方兼容端点（已移除 DeepSeek 路线）。
 
-### 方案 A：Claude Code + DeepSeek 官方 Anthropic 兼容端点（模板零改动，推荐）
+| 环节 | 需要模型吗 | 没有 `ANTHROPIC_API_KEY` 时 |
+| --- | --- | --- |
+| CI 验证（`verify-and-merge.yml`） | **不需要** | 照常运行：测试 + 8 道门禁 + 复现验证，信任评分照常计算 |
+| 足球比赛日 / 样本库刷新 / 发布页上线 | 不需要 | 照常运行 |
+| CI 首席 Bot 派活（`bot-dispatch.yml`） | 需要官方 Claude | 自动跳过并提示；改在本地派活 |
+| 本地 `/dispatch` | Claude Code 登录 Claude 账号即可 | 不需要 API key |
 
-DeepSeek 官方提供 Anthropic 消息协议兼容端点，Claude Code 直接指过去即可，整个模板（子代理/命令/pstack 插件）原样可用。
-
-本地 PowerShell（方式一：配置向导，推荐）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-deepseek.ps1 -Persist
-# 也支持 -Provider glm / kimi / custom（-BaseUrl + -Model），向导会提示输入 API Key
-```
-
-方式二：手动三行（写进 `$PROFILE` 或运行前执行）：
-
-```powershell
-$env:ANTHROPIC_BASE_URL  = "https://api.deepseek.com/anthropic"
-$env:ANTHROPIC_AUTH_TOKEN = "sk-你的DeepSeekKey"
-$env:ANTHROPIC_MODEL     = "deepseek-v4-pro"   # 首席 Bot 用 pro；想省钱可换 deepseek-flash
-```
-
-CI：仓库 Secrets 配 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，可选 Variables `AGENT_MODEL`。两个 workflow 已内置该支持，无需改代码。
-
-注意：
-
-- 智谱 GLM、月之暗面 Kimi 也提供同类 Anthropic 兼容端点，换 `ANTHROPIC_BASE_URL` 即可。
-- pstack 的 SKILL.md 是纯提示词，任何模型都能读；`/pstack:setup-pstack` 若检测不到你的模型可跳过（它只是写模型角色映射），需要时手动编辑 `~/.claude/rules/pstack-models.md`。
-- 长链路编排（首席 Bot 派活）建议用 pro 档模型；Engineer/QA 子代理可用 flash 档省成本。
-
-### 方案 B：Qwen Code CLI（国产原生，结构与 Claude Code 最像）
+本地还可以用 Qwen Code CLI 作为国产替代（结构与 Claude Code 最像）：
 
 ```powershell
 npm install -g @qwen-code/qwen-code
@@ -174,21 +152,6 @@ Copy-Item .claude/commands .qwen/commands -Recurse
 
 - 子代理文件格式与 Claude Code 兼容（`.qwen/agents/` 为项目级目录），frontmatter 不用改。
 - 认证和自定义模型见官方文档（qwen-code-docs 中文站）。
-- CI：官方提供 `qwen-code-action`，把 `bot-dispatch.yml` 里的 `claude -p` 换成 `qwen-code -p` 即可。
-
-### 方案 C：Codex CLI + DeepSeek（DeepSeek 官方文档支持）
-
-- 按 DeepSeek 官方文档《接入 Codex》配置 `~/.codex/config.toml`（`model_providers.deepseek`，base_url 用 `https://api.deepseek.com`）。
-- open-pstack 官方支持 Codex：`codex plugin marketplace add ericlitman/open-pstack`。
-- 子代理：config.toml 开 `[features] multi_agent = true`，代理定义放 `~/.codex/agents/`。
-
-### 对比
-
-| 方案 | 模板改动量 | pstack | 子代理支持 | 备注 |
-| --- | --- | --- | --- | --- |
-| A Claude Code + DeepSeek | 零（只配密钥） | 官方插件直接用 | 原生 | 改动最小，推荐先试 |
-| B Qwen Code CLI | 小（复制目录） | 提示词平替/skills CLI | 原生 | 国产免费额度友好 |
-| C Codex + DeepSeek | 中（重写代理配置） | open-pstack | 需开开关 | 官方文档齐全 |
 
 另外：GitHub Actions 在国内基本可用但偶有延迟；公司内网完全受限时可改用自托管 runner（workflow 无需改，只换 runner 标签）。
 

@@ -68,9 +68,9 @@ function computeScore(evidence, cfg) {
   if (ciOk) { s += 15; reasons.push('CI 全绿 +15'); }
   else { s -= 40; reasons.push('CI 未通过或未知 -40'); }
 
-  // 2. pstack 验证报告
+  // 2. 验证报告（CI 复现验证）
   const verified = ['true', true, 'pass'].includes(evidence.verified);
-  if (verified) { s += 10; reasons.push('pstack 验证报告通过 +10'); }
+  if (verified) { s += 10; reasons.push('验证报告通过 +10'); }
   else { s -= 10; reasons.push('缺少验证报告 -10'); }
 
   // 3. 任务类型

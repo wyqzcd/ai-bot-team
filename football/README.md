@@ -221,6 +221,8 @@ Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
 
 CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的真实时间**跑一遍 `node football/bin/gates.mjs`，所以"开赛超 72 小时没录赛果""候选规则到期没裁决""样本库过旧"都会让 CI 变红。测试或门禁任一失败，`verify` 检查本身都会变红（信任评分照常计算）。
 
+CI 的验证还包括**复现验证**：用 PR 的代码和样本库重新生成 `backtest-v3.jsonl`、`backtest-elo.jsonl` 与 `elo-model.json`，必须与提交的文件逐字节一致，并复算全部 active 规则。改了模型却没重新生成台账、或手改了台账，都会在这里失败。这一步不依赖任何大模型。
+
 | 门禁 | 检查内容 |
 |---|---|
 | G1 结构完整性 | 字段齐全、类型正确、字段序规范、seq 连续 |

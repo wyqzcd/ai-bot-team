@@ -31,6 +31,12 @@ jobs:
           npm install
           npm test
 
+      - name: 足球模块测试
+        id: football_tests
+        working-directory: football
+        continue-on-error: true
+        run: npm test
+
       # 足球台账 8 道机械门禁，用 CI 运行时的真实时间（单测里的门禁用固定时间，抓不到"赛果逾期"之类的问题）
       - name: 足球台账门禁（真实时间）
         id: football_gates
@@ -75,7 +81,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERIFIED=${{ steps.qa.outcome == 'success' && 'true' || 'false' }}
-          CI=${{ (steps.tests.outcome == 'success' && steps.football_gates.outcome == 'success') && 'success' || 'failure' }}
+          CI=${{ (steps.tests.outcome == 'success' && steps.football_tests.outcome == 'success' && steps.football_gates.outcome == 'success') && 'success' || 'failure' }}
           node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
@@ -96,9 +102,9 @@ jobs:
       # 测试与门禁前面用 continue-on-error 是为了评分照常计算、评论照常发出；
       # 这里收口：任一失败，verify 检查本身必须变红，不能出现"测试挂了但 CI 显示绿色"。
       - name: 测试或门禁失败则标红
-        if: ${{ steps.tests.outcome != 'success' || steps.football_gates.outcome != 'success' }}
+        if: ${{ steps.tests.outcome != 'success' || steps.football_tests.outcome != 'success' || steps.football_gates.outcome != 'success' }}
         run: |
-          echo "测试：${{ steps.tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}"
+          echo "demo 测试：${{ steps.tests.outcome }}；足球测试：${{ steps.football_tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}"
           exit 1
 
   merge:

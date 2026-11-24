@@ -6,15 +6,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { fitPoisson, lambdas, scoreMatrix, summarizeMatrix } from '../../football/src/poisson.mjs';
-import { blendedLambdas, fitModel } from '../../football/src/walkforward.mjs';
-import { fitEloPoisson, loadEloModel, predictElo } from '../../football/src/elo.mjs';
-import { GENESIS, foldLedger, hashEntry, readLedger, seal } from '../../football/src/ledger.mjs';
-import { computeStats, attributeMiss, outcomeOf } from '../../football/src/metrics.mjs';
-import { checkRegistry, effectiveStatus } from '../../football/src/rules.mjs';
-import { g1Structure, g2HashChain, g3Probability, g4Lock, g5Coverage } from '../../football/src/gates.mjs';
-import { LiveError, normalizeFixture, planPredictions, planResult, planRetraction } from '../../football/src/live.mjs';
-import { runAllGates } from '../../football/src/pipeline.mjs';
+import { fitPoisson, lambdas, scoreMatrix, summarizeMatrix } from '../src/poisson.mjs';
+import { blendedLambdas, fitModel } from '../src/walkforward.mjs';
+import { fitEloPoisson, loadEloModel, predictElo } from '../src/elo.mjs';
+import { GENESIS, foldLedger, hashEntry, readLedger, seal } from '../src/ledger.mjs';
+import { computeStats, attributeMiss, outcomeOf } from '../src/metrics.mjs';
+import { checkRegistry, effectiveStatus } from '../src/rules.mjs';
+import { g1Structure, g2HashChain, g3Probability, g4Lock, g5Coverage } from '../src/gates.mjs';
+import { LiveError, normalizeFixture, planPredictions, planResult, planRetraction } from '../src/live.mjs';
+import { runAllGates } from '../src/pipeline.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), 'football-test-'));

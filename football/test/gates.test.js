@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { checkDataQuality, checkRows, findSplitNames } from '../../football/src/quality.mjs';
+import { checkDataQuality, checkRows, findSplitNames } from '../src/quality.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DATA = path.join(REPO, 'football/data');
@@ -52,8 +52,8 @@ test('G8：样本库超过 30 天提示，超过 120 天阻断', () => {
 });
 
 // ---------- G6 候选到期裁决 ----------
-import { checkRegistry } from '../../football/src/rules.mjs';
-import { seal } from '../../football/src/ledger.mjs';
+import { checkRegistry } from '../src/rules.mjs';
+import { seal } from '../src/ledger.mjs';
 
 function candidateLedger(n) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'review-'));
@@ -78,7 +78,7 @@ test('G6：候选规则必须登记裁决阈值；样本攒够必须裁决', () 
 });
 
 // ---------- G6 登记表发布锚点 ----------
-import { checkRegistryAnchor, registryAnchor } from '../../football/src/rules.mjs';
+import { checkRegistryAnchor, registryAnchor } from '../src/rules.mjs';
 
 test('G6 锚点：已发布规则口径不可改，只能撤回后新登记', () => {
   const active = { id: 'R-901', status: 'active', title: 't', definition: 'd', sample: { ledger: 'l', filter: { from: '2024-07-01' } }, recompute: 'x', claim: { metric: 'direction_hit', rate: 0.6, n: 100 }, baseline: 'b' };

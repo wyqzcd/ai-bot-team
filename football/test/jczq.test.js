@@ -7,10 +7,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { mapLiveResponse } from '../../scripts/jczq-board.mjs';
-import { TEAM_ALIASES, loadDataset } from '../../football/src/dataset.mjs';
-import { compileTeamMap, datasetTeamSets, loadTeamMap, normalizeName, resolveJczq, resolveJczqNo } from '../../football/src/jczq.mjs';
-import { readLedger, seal } from '../../football/src/ledger.mjs';
-import { renderReport } from '../../football/src/report.mjs';
+import { TEAM_ALIASES, loadDataset } from '../src/dataset.mjs';
+import { compileTeamMap, datasetTeamSets, loadTeamMap, normalizeName, resolveJczq, resolveJczqNo } from '../src/jczq.mjs';
+import { readLedger, seal } from '../src/ledger.mjs';
+import { renderReport } from '../src/report.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RAW = JSON.parse(readFileSync(path.join(REPO, 'fixtures/2026-11-15.live-raw.json'), 'utf8'));

@@ -85,6 +85,7 @@ jobs:
         run: |
           node football/bin/gates.mjs
           (cd demo && npm test)
+          (cd football && npm test)
           node football/bin/publish.mjs
 
       - name: 开 PR 交人工审

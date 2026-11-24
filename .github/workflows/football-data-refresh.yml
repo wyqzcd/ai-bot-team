@@ -40,6 +40,7 @@ jobs:
         run: |
           node football/bin/gates.mjs
           (cd demo && npm test)
+          (cd football && npm test)
 
       - name: 开 PR 交人工审
         if: steps.changed.outputs.yes == 'true'

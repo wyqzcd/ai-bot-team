@@ -32,20 +32,40 @@
 ```
 football/
 ├── data/
-│   ├── big5.csv             样本库：五大联赛 2017-07 ~ 2026-09 赛果 + 射正 + 赛前赔率（赔率只做基线，不进模型）
-│   └── jczq-teams.json      竞彩中文队名 → 样本库队名对照表
+│   ├── big5.csv             样本库：五大联赛 2017-07 ~ 2026-09 赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
+│   ├── elo-latest.csv       全联赛球队最新 ClubElo 快照（欧冠候选用）
+│   ├── elo-model.json       Elo 泊松模型参数（只用训练段拟合）
+│   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G8 校验）
+│   ├── jczq-teams.json      竞彩中文队名 → 样本库队名对照表
+│   └── uefa-teams.json      UEFA 球队编号 → Elo 快照队名对照表
+├── fixtures/ucl/            UEFA 官方赛程/赛果精简快照（赛前证据，不覆盖）
 ├── ledger/
 │   ├── backtest-v3.jsonl    当前回测台账（确定性生成，可逐字节复现）
-│   ├── backtest-v2.jsonl    v2 回测台账，已冻结（见下方"台账版本"）
+│   ├── backtest-v2.jsonl    v2 回测台账，已冻结
 │   ├── backtest.jsonl       v1 回测台账，已冻结
-│   ├── live.jsonl           实盘台账（首次预测时创建，只追加）
+│   ├── backtest-elo.jsonl   Elo 泊松模型留出段回测台账
+│   ├── live.jsonl           实盘台账（竞彩 / 手工 fixtures，首次预测时创建，只追加）
+│   ├── ucl-candidate.jsonl  欧冠候选台账（只作候选，不作结论）
+│   ├── ucl-notes.json       欧冠首发标注（缺阵常规主力，不进模型）
 │   ├── jczq-refs.json       竞彩编号/中文队名旁注（只用于展示，不进哈希链）
-│   └── published.json       发布锚点：每本台账已发布的条数 + 末条 hash
+│   └── published.json       发布锚点：每本台账已发布的条数 + 末条 hash，登记表每条规则的状态与口径指纹
 ├── rules/registry.json      规则登记表（唯一读入口）
 ├── reports/<date>.html      发布页
-├── src/                     poisson / walkforward / ledger / metrics / rules / gates / live / report
-└── bin/                     CLI（见下）
+├── src/                     模型、台账、门禁、统计等模块（见下表）
+├── bin/                     命令行脚本（见"命令"）
+├── test/                    单测（cd football && npm test）
+└── package.json
 ```
+
+| 模块 | 作用 |
+|---|---|
+| `src/poisson.mjs` `src/walkforward.mjs` | Dixon-Coles 泊松拟合、进球 + 射正混合、滚动前推回测 |
+| `src/elo.mjs` | Elo 泊松跨联赛候选模型 |
+| `src/ledger.mjs` | 台账条目、哈希链、折叠（撤回口径） |
+| `src/metrics.mjs` `src/tiers.mjs` | 复算口（命中率 + 同样本基线）、赛后归因、档位 |
+| `src/rules.mjs` `src/gates.mjs` `src/quality.mjs` | 规则登记与锚点、8 道门禁、数据质量 |
+| `src/live.mjs` `src/jczq.mjs` `src/ucl.mjs` | 实盘流程、竞彩接入、欧冠场次口径 |
+| `src/report.mjs` `src/pipeline.mjs` `src/config.mjs` | 发布页、门禁输入组装、路径与口径常量 |
 
 ## 命令（在仓库根目录执行）
 
@@ -60,7 +80,9 @@ node football/bin/compare.mjs --a ledger/backtest-v2.jsonl --b ledger/backtest-v
 # 重建
 node football/bin/build-dataset.mjs --raw <Matches.csv>   # 从原始 CSV 裁样本库
 node football/bin/backtest.mjs                            # 重新生成回测台账（约 20 秒）
-node football/bin/calibrate.mjs --target 0.66             # 训练段选阈值，报告留出段
+node football/bin/calibrate.mjs --target 0.66             # 训练段选阈值，报告留出段（高置信档）
+node football/bin/calibrate.mjs --target 0.80             # 同上（精选档）
+node football/bin/elo-backtest.mjs                        # Elo 泊松模型：训练段拟合参数 + 留出段回测台账
 
 # 竞彩实盘（见下方"接入竞彩"）
 node football/bin/jczq.mjs --date 2026-11-29 --check      # 只看每场映射状态
@@ -72,6 +94,12 @@ node football/bin/predict.mjs --fixtures fixtures.json    # 赛前预测（开�
 node football/bin/predict.mjs --fixtures fixtures.json --replace --reason "首发确认后复核"   # 赛前改判
 node football/bin/result.mjs --id "E0|2026-11-28|Arsenal|Chelsea" --ft 2-1 --ht 1-0 --source "官方赛果"
 node football/bin/retract.mjs --seq 12 --reason "<原因>"
+
+# 欧冠（候选，见下方"欧冠候选"）
+NODE_USE_ENV_PROXY=1 node football/bin/ucl.mjs --fetch --date 2026-11-24   # 抓 UEFA 官方赛程快照
+node football/bin/ucl.mjs --date 2026-11-24                                # 出候选预测（开赛即锁定）
+NODE_USE_ENV_PROXY=1 node football/bin/ucl-lineups.mjs --date 2026-11-24   # 首发标注
+NODE_USE_ENV_PROXY=1 node football/bin/ucl-results.mjs --date 2026-11-24   # 赛后录比分、算命中
 
 # 门禁与发布
 node football/bin/gates.mjs                # 8 道门禁
@@ -106,6 +134,17 @@ node football/bin/result.mjs --no 周六001 --ft 2-1 --source "竞彩官方赛�
 - 竞彩胜平负（had）赔率写进 `market`，只作赛后对照基线；让球胜平负不使用。竞彩赔率返还率低于样本库的博彩公司均值，所以实盘基线和回测基线不能直接比。
 - 竞彩编号每周复用；`result.mjs --no` 只在"尚未录赛果"的预测里找，必须唯一命中，否则要求改用 `--id`。
 
+## 欧冠候选
+
+五大联赛模型的球队强弱是"相对本联赛平均"，跨联赛不可比，所以欧冠用 Elo 泊松模型（`src/elo.mjs`）：λ 由赛前 ClubElo 差决定，参数只用 2024-07 之前的五大联赛比赛拟合。它在五大联赛留出段上与 v3 基本持平（R-012、R-013），但**没有任何欧冠样本回测**，所以欧冠预测只登记为候选（R-014），不作结论。
+
+- 赛程、首发、赛果全部来自 UEFA 官方接口（`match.uefa.com`），快照存在 `fixtures/ucl/`，已存在不覆盖。
+- 出预测前固定口径：UEFA 球队编号查 `data/uefa-teams.json`，再查 Elo 快照；查不到或 Elo 早于开赛 120 天 → 不出预测。
+- 首发只作标注：本季此前欧冠首发 ≥ 3 场的算常规主力，首发公布后列出缺阵者，写入 `ledger/ucl-notes.json`，不改已锁定的概率。
+- 伤停：原数据源失效，UEFA 接口不提供，暂不处理。
+- 每天的比赛日工作流会自动录前一天赛果、出当天候选预测（见"上线与定时运转"）。
+- 本环境访问 UEFA 需代理，Node 内置 fetch 要加 `NODE_USE_ENV_PROXY=1`；GitHub Actions 里不需要。
+
 ## 台账版本
 
 台账一经发布即冻结。数据或口径有变化时，生成新版本文件，旧文件原样保留，依赖旧台账的规则改为撤回留痕：
@@ -113,6 +152,7 @@ node football/bin/result.mjs --no 周六001 --ft 2-1 --source "竞彩官方赛�
 - **v1** `backtest.jsonl`：数据源把同一球队拆成两种写法（`Nottm Forest`/`Nott'm Forest`、`MGladbach`/`M'gladbach`，2024-12 起切换），模型把切换后的两队当成新队。R-001~R-003 因此撤回，但数字仍能在 v1 上复算（G7 会检查）。
 - **v2** `backtest-v2.jsonl`：`data/big5.csv` 已合并分裂队名（`src/dataset.mjs` 的 `TEAM_ALIASES`），模型 `dc-poisson@1.0.0`（只用进球）。R-006~R-008 仍然成立、可复算，作为历史结论保留。
 - **v3** `backtest-v3.jsonl`：模型 `dc-poisson-sot@1.1.0`（进球 + 射正混合），样本库新增射正列。R-009~R-011。
+- **Elo** `backtest-elo.jsonl`：Elo 泊松模型在五大联赛留出段的回测，R-012、R-013。精选档 R-015 与 v3 同一台账。
 
 v1 只能用修正前的样本库复现，即本仓库首次提交该模块时的 `big5.csv`。
 

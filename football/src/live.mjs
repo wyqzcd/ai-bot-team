@@ -8,8 +8,8 @@
 import { LEAGUES } from './dataset.mjs';
 import { MIN_RESULT_MINUTES, g1Structure, g2HashChain, g3Probability, g4Lock } from './gates.mjs';
 import { foldLedger, predictionEntry, resultEntry, retractionEntry, seal } from './ledger.mjs';
-import { DEFAULT_PARAMS, fitPoisson } from './poisson.mjs';
-import { MODEL_NAME, MODEL_VERSION, predictMatch } from './walkforward.mjs';
+import { DEFAULT_PARAMS } from './poisson.mjs';
+import { MODEL_NAME, MODEL_VERSION, fitModel, predictMatch } from './walkforward.mjs';
 
 export class LiveError extends Error {
   constructor(message) {
@@ -99,7 +99,7 @@ export function planPredictions({ fixtures, dataset, liveEntries, now, replace =
       if (typeof reason !== 'string' || reason.trim().length < 4) throw new LiveError(`${fixture.id}: 改判必须写明理由（--reason，≥4 字）`);
       additions.push(retractionEntry({ target: existing.prediction.seq, id: fixture.id, reason: `赛前改判：${reason.trim()}`, createdAt: now }));
     }
-    if (!models.has(fixture.league)) models.set(fixture.league, fitPoisson(history.filter((m) => m.league === fixture.league), now, params));
+    if (!models.has(fixture.league)) models.set(fixture.league, fitModel(history.filter((m) => m.league === fixture.league), now, params));
     const model = models.get(fixture.league);
     if (!model.ok) throw new LiveError(`${fixture.league}: 无法拟合（${model.reason}）`);
     for (const team of [fixture.home, fixture.away]) {

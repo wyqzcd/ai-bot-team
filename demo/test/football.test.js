@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { fitPoisson, scoreMatrix, summarizeMatrix } from '../../football/src/poisson.mjs';
+import { fitPoisson, lambdas, scoreMatrix, summarizeMatrix } from '../../football/src/poisson.mjs';
+import { blendedLambdas, fitModel } from '../../football/src/walkforward.mjs';
 import { GENESIS, foldLedger, hashEntry, readLedger, seal } from '../../football/src/ledger.mjs';
 import { computeStats, attributeMiss, outcomeOf } from '../../football/src/metrics.mjs';
 import { checkRegistry, effectiveStatus } from '../../football/src/rules.mjs';
@@ -91,6 +92,37 @@ test('样本不足时拒绝拟合而不是硬出预测', () => {
   const model = fitPoisson(syntheticHistory().slice(0, 10), '2027-01-01T00:00:00Z');
   assert.equal(model.ok, false);
   assert.match(model.reason, /样本不足/);
+});
+
+// ---------- 进球 + 射正混合 ----------
+const P = { halfLifeDays: 180, windowDays: 730, shrink: 4, iterations: 30, maxGoals: 10, rhoGrid: [0], minMatches: 50 };
+/** 射正与进球反着来：Weak 射正多、进球少，用来区分两套评分。 */
+const withShots = () => syntheticHistory().map((m) => ({ ...m, sot: { h: m.home === 'Weak' ? 9 : 3, a: m.away === 'Weak' ? 9 : 3 } }));
+
+test('混合 λ 介于进球 λ 与射正折算 λ 之间；goalWeight=1 退化为纯进球模型', () => {
+  const history = withShots();
+  const asOf = '2026-06-01T00:00:00Z';
+  const pure = fitModel(history, asOf, P, 1);
+  assert.equal(pure.shots, null);
+  assert.deepEqual(blendedLambdas(pure, 'Strong', 'Weak'), lambdas(fitPoisson(history, asOf, P), 'Strong', 'Weak'));
+  const half = fitModel(history, asOf, P, 0.5);
+  const shotOnly = fitModel(history, asOf, P, 0);
+  const g = blendedLambdas(pure, 'Weak', 'Mid1').home;
+  const s = blendedLambdas(shotOnly, 'Weak', 'Mid1').home;
+  const h = blendedLambdas(half, 'Weak', 'Mid1').home;
+  assert.ok(s > g, 'Weak 射正多，射正折算 λ 应高于进球 λ');
+  assert.ok(Math.abs(h - (g + s) / 2) < 1e-9);
+});
+
+test('射正评分同样不用 asOf 之后的比赛；没有射正数据时退化为纯进球', () => {
+  const history = withShots();
+  const cut = history[150].kickoff;
+  const base = fitModel(history, cut, P, 0.5);
+  const poisoned = history.map((m, i) => (i >= 150 ? { ...m, sot: { h: 30, a: 0 } } : m));
+  assert.deepEqual(blendedLambdas(fitModel(poisoned, cut, P, 0.5), 'Strong', 'Weak'), blendedLambdas(base, 'Strong', 'Weak'));
+  const noShots = fitModel(syntheticHistory(), cut, P, 0.5);
+  assert.equal(noShots.ok, true);
+  assert.equal(noShots.shots, null);
 });
 
 // ---------- 台账与哈希链 ----------
@@ -296,8 +328,8 @@ test('stats.mjs --rule R-007 一键复算并与登记值一致', () => {
   assert.ok(row.baselines.market_fav.rate !== null, '必须同时给出同样本市场基线');
 });
 
-test('回测台账（冻结的 v1 与当前 v2）每条 hash 可独立重算', () => {
-  for (const file of ['backtest.jsonl', 'backtest-v2.jsonl']) {
+test('回测台账（冻结的 v1/v2 与当前 v3）每条 hash 可独立重算', () => {
+  for (const file of ['backtest.jsonl', 'backtest-v2.jsonl', 'backtest-v3.jsonl']) {
     const entries = readLedger(path.join(REPO, 'football/ledger', file));
     for (const i of [0, 1, Math.floor(entries.length / 2), entries.length - 1]) assert.equal(hashEntry(entries[i]), entries[i].hash, file);
   }

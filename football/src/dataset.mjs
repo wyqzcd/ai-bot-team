@@ -1,5 +1,5 @@
 /**
- * 样本库：五大联赛逐场赛果 + 赛前赔率（赔率只用于对照基线，不进模型）。
+ * 样本库：五大联赛逐场赛果 + 射正 + 赛前赔率（赔率只用于对照基线，不进模型）。
  * 口径：一行一场；kickoff 用比赛日 + 开球时间（数据源为当地时间，缺省 12:00），
  * 只用于"预测必须早于开赛"的锁定判断，不参与建模。
  */
@@ -34,6 +34,7 @@ export const DATASET_COLUMNS = [
   'league', 'date', 'time', 'home', 'away',
   'fthg', 'ftag', 'hthg', 'htag',
   'odd_h', 'odd_d', 'odd_a', 'odd_over25', 'odd_under25',
+  'hst', 'ast',
 ];
 
 function num(value) {
@@ -67,6 +68,8 @@ export function toMatch(row) {
     ht: num(row.hthg) === null || num(row.htag) === null ? null : { h: num(row.hthg), a: num(row.htag) },
     odds: odds.every((value) => value !== null && value > 1) ? odds : null,
     oddsOU: num(row.odd_over25) && num(row.odd_under25) ? [num(row.odd_over25), num(row.odd_under25)] : null,
+    // 射正（shots on target）：只作为球队强弱的第二信号进模型，缺失则该场不参与射正评分。
+    sot: num(row.hst) === null || num(row.ast) === null ? null : { h: num(row.hst), a: num(row.ast) },
   };
 }
 

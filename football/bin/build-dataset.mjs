@@ -40,6 +40,8 @@ const rows = parseCsv(readFileSync(raw, 'utf8'))
     odd_a: row.OddAway,
     odd_over25: row.Over25,
     odd_under25: row.Under25,
+    hst: intText(row.HomeTarget),
+    ast: intText(row.AwayTarget),
   }))
   .sort((a, b) => (a.date + a.time + a.league + a.home < b.date + b.time + b.league + b.home ? -1 : 1));
 

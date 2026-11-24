@@ -83,17 +83,17 @@
     },
     {
       "id": "R-004",
-      "title": "实盘高置信档（conf ≥ 0.56）方向命中",
+      "title": "实盘高置信档（conf ≥ 0.53）方向命中",
       "status": "candidate",
-      "definition": "同 R-007 口径，但只统计 mode=live（真实赛前发布、开赛锁定）的预测；竞彩场次通过 football/bin/jczq.mjs 入账。",
+      "definition": "同 R-010 口径（模型 dc-poisson-sot@1.1.0，conf ≥ 0.53），但只统计 mode=live（真实赛前发布、开赛锁定）的预测；竞彩场次通过 football/bin/jczq.mjs 入账。",
       "sample": {
         "ledger": "ledger/live.jsonl",
         "filter": {
           "mode": "live",
-          "minConf": 0.56
+          "minConf": 0.53
         }
       },
-      "recompute": "node football/bin/stats.mjs --ledger football/ledger/live.jsonl --filter '{\"mode\":\"live\",\"minConf\":0.56}'",
+      "recompute": "node football/bin/stats.mjs --ledger football/ledger/live.jsonl --filter '{\"mode\":\"live\",\"minConf\":0.53}'",
       "claim": null,
       "note": "实盘样本尚未积累，没有可复算的 claim，只能是候选。积累到 n ≥ 200 后再登记 claim 并申请转 active。",
       "registeredAt": "2026-11-24"
@@ -167,7 +167,8 @@
         "n": 1104
       },
       "baseline": "覆盖率 30.65%（1104/3602）。同样本赛前赔率热门 67.30%：该档命中主要来自'这些场次本来就一边倒'，模型并未跑赢市场。错判 363 场中 224 场是平局。",
-      "registeredAt": "2026-11-24"
+      "registeredAt": "2026-11-24",
+      "note": "v2 台账（模型 1.0.0）的历史结论，仍然成立、可复算；当前高置信档见 R-010。"
     },
     {
       "id": "R-008",
@@ -188,6 +189,72 @@
         "n": 12557
       },
       "baseline": "TOP3 比分口径；单比分命中会显著更低，两者不可混报。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-009",
+      "title": "全样本方向命中（v3 台账，模型 1.1.0：进球 + 射正混合）",
+      "status": "active",
+      "definition": "方向 = 胜/平/负三选一，取模型概率最大的一项；赛果方向与之相同记 1 次命中。样本为 v3 回测台账里全部已结算预测，不做任何剔除。",
+      "sample": {
+        "ledger": "ledger/backtest-v3.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-009",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.5231,
+        "n": 12557
+      },
+      "baseline": "同样本赛前赔率热门 53.61%（n=12556）。模型全样本仍略低于市场热门。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-010",
+      "title": "高置信档（模型最大概率 ≥ 0.53）方向命中，留出段（v3 台账）",
+      "status": "active",
+      "tier": "high-confidence",
+      "definition": "同 R-009 的方向命中口径，只统计 conf ≥ 0.53 的场次。阈值沿用 R-007 的固定流程（football/bin/calibrate.mjs：训练段命中 ≥ 66% 的最小阈值），只在训练段（开赛 < 2024-07-01）选出：训练段 66.84%，n=3094，覆盖 34.55%。射正混合权重 0.5 同样只在训练段选出。",
+      "sample": {
+        "ledger": "ledger/backtest-v3.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "minConf": 0.53
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-010",
+      "selection": "node football/bin/calibrate.mjs --target 0.66 --split 2024-07-01",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.6656,
+        "n": 1199
+      },
+      "baseline": "覆盖率 33.29%（1199/3602）。同样本赛前赔率热门 66.72%，模型仍未跑赢市场。与 v2 同覆盖率对比（node football/bin/compare.mjs --a ledger/backtest-v2.jsonl --b ledger/backtest-v3.jsonl --from 2024-07-01）：覆盖 30%/35% 时 v3 命中 67.81%/66.14%，v2 为 67.35%/65.27%，差距不显著；全样本对数损失配对改善 z=2.57。错判 401 场中 248 场是平局，平局盲区未改善。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-011",
+      "title": "全样本比分 TOP3 命中（v3 台账）",
+      "status": "active",
+      "definition": "真实比分落在模型比分矩阵概率前三的比分之内记 1 次命中（三个比分都算，不是单比分）。",
+      "sample": {
+        "ledger": "ledger/backtest-v3.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2019-07-01"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-011",
+      "claim": {
+        "metric": "score_top3_hit",
+        "rate": 0.3304,
+        "n": 12557
+      },
+      "baseline": "TOP3 比分口径；v2 为 32.25%。",
       "registeredAt": "2026-11-24"
     }
   ]

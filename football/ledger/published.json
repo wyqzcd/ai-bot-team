@@ -1,13 +1,17 @@
 {
-  "publishedAt": "2026-11-24T14:00:00Z",
+  "publishedAt": "2026-11-24T15:00:00Z",
   "report": "../reports/2026-11-24.html",
-  "backtest-v2": {
+  "backtest-v3": {
     "entries": 25114,
-    "lastHash": "c279e08812af62b6"
+    "lastHash": "15c685f1b7b27381"
   },
   "backtest": {
     "entries": 25114,
     "lastHash": "f1cd7941793589b9"
+  },
+  "backtest-v2": {
+    "entries": 25114,
+    "lastHash": "c279e08812af62b6"
   },
   "live": {
     "entries": 0,

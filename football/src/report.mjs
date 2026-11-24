@@ -47,7 +47,9 @@ export function renderReport({ generatedAt, gates, registry, ledgers, model, jcz
   });
 
   // 高置信档口径只从登记表的 active 规则读，不在这里硬编码阈值。
-  const highTier = active.find(({ rule }) => rule.tier === 'high-confidence')?.rule ?? null;
+  const backtestLabel = ledgers.find((l) => l.role === 'backtest')?.label;
+  const tiers = active.filter(({ rule }) => rule.tier === 'high-confidence').map(({ rule }) => rule);
+  const highTier = tiers.find((rule) => path.basename(rule.sample.ledger, '.jsonl') === backtestLabel) ?? tiers.at(-1) ?? null;
   const holdoutFrom = highTier?.sample.filter.from ?? '2024-07-01';
   const curve = backtest ? coverageCurve(backtest, { mode: 'backtest', from: holdoutFrom }) : [];
   const live = ledgers.find((l) => l.role === 'live')?.entries ?? [];

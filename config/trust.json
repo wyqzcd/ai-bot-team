@@ -16,6 +16,7 @@
     { "path": "docs/**", "risk": "low" },
     { "path": "demo/test/**", "risk": "low" },
     { "path": "demo/src/**", "risk": "medium" },
+    { "path": "football/ledger/published.json", "risk": "high" },
     { "path": "football/data/**", "risk": "low" },
     { "path": "football/ledger/**", "risk": "low" },
     { "path": "config/**", "risk": "high" },

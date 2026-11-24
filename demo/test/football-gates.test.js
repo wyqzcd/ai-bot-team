@@ -76,3 +76,33 @@ test('G6：候选规则必须登记裁决阈值；样本攒够必须裁决', () 
   assert.deepEqual(checkRegistry({ rules: [candidate(file, { reviewAt: { n: 4 } })] }, { recompute: false }).errors, []);
   assert.match(checkRegistry({ rules: [candidate(file, { reviewAt: { n: 3 } })] }, { recompute: false }).errors.join(), /样本已达 n=3 ≥ 3，必须裁决/);
 });
+
+// ---------- G6 登记表发布锚点 ----------
+import { checkRegistryAnchor, registryAnchor } from '../../football/src/rules.mjs';
+
+test('G6 锚点：已发布规则口径不可改，只能撤回后新登记', () => {
+  const active = { id: 'R-901', status: 'active', title: 't', definition: 'd', sample: { ledger: 'l', filter: { from: '2024-07-01' } }, recompute: 'x', claim: { metric: 'direction_hit', rate: 0.6, n: 100 }, baseline: 'b' };
+  const cand = { id: 'R-902', status: 'candidate', title: 'c', definition: 'd', claim: null };
+  const retracted = { ...active, id: 'R-903', status: 'retracted', retraction: { date: '2026-11-24', reason: '口径有误' } };
+  const anchor = registryAnchor({ rules: [active, cand, retracted] });
+  const check = (rules) => checkRegistryAnchor({ rules }, anchor).join('\n');
+
+  assert.equal(check([active, cand, retracted]), '', '原样不变');
+  assert.equal(check([{ ...active, note: '补充说明' }, { ...cand, definition: '候选可以改' }, retracted]), '', 'note 与候选的修改允许');
+  assert.equal(check([active, cand, retracted, { id: 'R-904', status: 'candidate' }]), '', '新增规则允许');
+  assert.equal(check([{ ...active, status: 'retracted', retraction: { date: '2026-11-25', reason: '撤回' } }, cand, retracted]), '', 'active → retracted 允许');
+
+  assert.match(check([{ ...active, claim: { ...active.claim, rate: 0.66 } }, cand, retracted]), /R-901: 已发布规则的口径.*被改动/);
+  assert.match(check([{ ...active, sample: { ...active.sample, filter: { from: '2025-01-01' } } }, cand, retracted]), /R-901: 已发布规则的口径/);
+  assert.match(check([{ ...active, status: 'candidate' }, cand, retracted]), /不能降回候选/);
+  assert.match(check([cand, retracted]), /R-901: 已发布规则被删除/);
+  assert.match(check([active, cand, { ...retracted, status: 'active' }]), /已撤回规则不能恢复/);
+  assert.match(check([active, cand, { ...retracted, retraction: { ...retracted.retraction, reason: '改写撤回原因' } }]), /撤回记录被改动/);
+});
+
+test('G6 锚点：仓库当前登记表与已发布锚点一致', () => {
+  const anchors = JSON.parse(readFileSync(path.join(REPO, 'football/ledger/published.json'), 'utf8'));
+  const registry = JSON.parse(readFileSync(path.join(REPO, 'football/rules/registry.json'), 'utf8'));
+  assert.ok(anchors.registry, 'published.json 必须包含登记表锚点');
+  assert.deepEqual(checkRegistryAnchor(registry, anchors.registry), []);
+});

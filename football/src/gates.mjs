@@ -6,14 +6,14 @@
  *   G3 概率量化    概率在 [0,1]、三项和≈1、pick 是最大项、conf=probs[pick]、档位和≈1、TOP3 有序
  *   G4 开赛锁定    预测必须早于开赛；赛果不得早于开赛 + 105 分钟；有赛果后不得再预测；同场改判必须先赛前撤回
  *   G5 覆盖率      回测：样本库窗口内每场都有预测和赛果（不许挑场）；实盘：开赛超 72h 仍无赛果即阻断
- *   G6 规则登记    active 规则三要素齐全；撤回必须留痕；候选规则只警告
+ *   G6 规则登记    active 规则三要素齐全；撤回必须留痕；候选到期须裁决；已发布规则口径不可改（对照发布锚点）
  *   G7 复算一致    active 规则的 claim 现场复算，rate 误差 ≤ 0.0005 且 n 一致
  *   G8 数据质量    样本库指纹、队名分裂、行级校验、新鲜度（见 quality.mjs）
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { FIELD_ORDER, GENESIS, PICKS, foldLedger, hashEntry } from './ledger.mjs';
 import { checkDataQuality } from './quality.mjs';
-import { checkRegistry } from './rules.mjs';
+import { checkRegistry, checkRegistryAnchor } from './rules.mjs';
 
 const MAX_LISTED = 20;
 export const RESULT_GRACE_HOURS = 72;
@@ -209,8 +209,9 @@ export function g5Coverage(entries, label, { expectedIds = null, now = null } = 
   return g.done();
 }
 
-export function g6Registry(registry) {
+export function g6Registry(registry, anchor = null) {
   const g = gate('G6', '规则登记');
+  checkRegistryAnchor(registry, anchor).forEach(g.error);
   const report = checkRegistry(registry, { recompute: false });
   report.errors.forEach(g.error);
   report.warnings.forEach(g.warn);
@@ -255,7 +256,7 @@ export function runGates({ ledgers, registry, anchors = {}, now, dataQuality = {
     merge('G3', '概率量化', ledgers.map((l) => g3Probability(l.entries, l.label))),
     merge('G4', '开赛锁定', ledgers.map((l) => g4Lock(l.entries, l.label))),
     merge('G5', '覆盖率', ledgers.map((l) => g5Coverage(l.entries, l.label, { expectedIds: l.expectedIds ?? null, now }))),
-    g6Registry(registry),
+    g6Registry(registry, anchors.registry ?? null),
     g7Recompute(registry),
     g8DataQuality({ ...dataQuality, now }),
   ];

@@ -1,5 +1,5 @@
 {
-  "publishedAt": "2026-11-24T14:20:00Z",
+  "publishedAt": "2026-11-24T14:40:00Z",
   "report": "../reports/2026-11-24.html",
   "backtest-v3": {
     "entries": 25114,
@@ -24,5 +24,67 @@
   "ucl-candidate": {
     "entries": 7,
     "lastHash": "866c42019d32cdce"
+  },
+  "registry": {
+    "R-001": {
+      "status": "retracted",
+      "fingerprint": "0c5251b97702f999",
+      "retraction": "a4c4de99dbd2dcf9"
+    },
+    "R-002": {
+      "status": "retracted",
+      "fingerprint": "4b25b3cfcb53a8d2",
+      "retraction": "5b7b94002f8a7430"
+    },
+    "R-003": {
+      "status": "retracted",
+      "fingerprint": "b90be5aa6ec686bf",
+      "retraction": "f05aec1636663765"
+    },
+    "R-004": {
+      "status": "candidate",
+      "fingerprint": "cb1283f5b61f7bde"
+    },
+    "R-005": {
+      "status": "retracted",
+      "fingerprint": "7154bd3ce588327f",
+      "retraction": "7ccec07a90ddb891"
+    },
+    "R-006": {
+      "status": "active",
+      "fingerprint": "eb7145bf593f4dfb"
+    },
+    "R-007": {
+      "status": "active",
+      "fingerprint": "8662d45844b81537"
+    },
+    "R-008": {
+      "status": "active",
+      "fingerprint": "0ce0966db7d2b655"
+    },
+    "R-009": {
+      "status": "active",
+      "fingerprint": "e2eb243ae159a49c"
+    },
+    "R-010": {
+      "status": "active",
+      "fingerprint": "0bd6f3aea1ab1c0e"
+    },
+    "R-011": {
+      "status": "active",
+      "fingerprint": "71d79c492c707620"
+    },
+    "R-012": {
+      "status": "active",
+      "fingerprint": "30b12571ef216f52"
+    },
+    "R-013": {
+      "status": "active",
+      "fingerprint": "7c6074680d5aa2e4"
+    },
+    "R-014": {
+      "status": "candidate",
+      "fingerprint": "3989ce75a6ee7482"
+    }
   }
 }

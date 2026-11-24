@@ -4,6 +4,7 @@
  * 三要素缺一，有效状态强制降为 candidate；candidate 不能当门禁、不能在发布页当结论展示。
  * active 规则的 claim 必须能被复算重现（rate 误差 ≤ 0.0005 且 n 完全一致）。
  */
+import { createHash } from 'node:crypto';
 import { readFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { FOOTBALL_ROOT } from './dataset.mjs';
@@ -102,4 +103,55 @@ export function checkRegistry(registry, { recompute = true } = {}) {
     rules.push(row);
   }
   return { errors, recomputeErrors, warnings, rules };
+}
+
+/**
+ * 登记表发布锚点：发布时记下每条规则的状态与口径指纹。
+ * 口径字段（PROTECTED_FIELDS）一经以 active/retracted 发布就不可改：要改口径只能撤回后新登记。
+ * note、reviewAt 属于管理信息，不进指纹。
+ */
+export const PROTECTED_FIELDS = ['title', 'definition', 'sample', 'recompute', 'selection', 'claim', 'baseline', 'tier', 'registeredAt'];
+
+const canonicalJson = (value) => JSON.stringify(value, (key, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]])) : v));
+
+export function ruleFingerprint(rule) {
+  const body = Object.fromEntries(PROTECTED_FIELDS.map((k) => [k, rule[k] ?? null]));
+  return createHash('sha256').update(canonicalJson(body)).digest('hex').slice(0, 16);
+}
+
+const retractionFingerprint = (rule) => createHash('sha256').update(canonicalJson(rule.retraction ?? null)).digest('hex').slice(0, 16);
+
+export function registryAnchor(registry) {
+  return Object.fromEntries(registry.rules.map((rule) => [rule.id, {
+    status: rule.status,
+    fingerprint: ruleFingerprint(rule),
+    ...(rule.status === 'retracted' ? { retraction: retractionFingerprint(rule) } : {}),
+  }]));
+}
+
+/** 对照发布锚点检查登记表变化，返回错误列表。 */
+export function checkRegistryAnchor(registry, anchor) {
+  if (!anchor) return [];
+  const errors = [];
+  const current = new Map(registry.rules.map((r) => [r.id, r]));
+  for (const [id, pub] of Object.entries(anchor)) {
+    const rule = current.get(id);
+    if (!rule) {
+      errors.push(`${id}: 已发布规则被删除（只能撤回留痕，不能删）`);
+      continue;
+    }
+    if (pub.status === 'candidate') continue; // 候选没有发布过结论，可以修改
+    if (rule.status === 'candidate') {
+      errors.push(`${id}: 已发布的 ${pub.status} 规则不能降回候选`);
+      continue;
+    }
+    if (ruleFingerprint(rule) !== pub.fingerprint) {
+      errors.push(`${id}: 已发布规则的口径（${PROTECTED_FIELDS.join('/')}）被改动；要改口径请撤回后新登记`);
+    }
+    if (pub.status === 'retracted') {
+      if (rule.status !== 'retracted') errors.push(`${id}: 已撤回规则不能恢复`);
+      else if (retractionFingerprint(rule) !== pub.retraction) errors.push(`${id}: 已发布的撤回记录被改动`);
+    }
+  }
+  return errors;
 }

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { PATHS } from '../src/config.mjs';
 import { gateInputs } from '../src/pipeline.mjs';
 import { runGates } from '../src/gates.mjs';
+import { registryAnchor } from '../src/rules.mjs';
 import { renderReport } from '../src/report.mjs';
 import { MODEL_NAME, MODEL_VERSION } from '../src/walkforward.mjs';
 import { now, parseArgs, run } from '../src/cli.mjs';
@@ -30,6 +31,7 @@ run(async () => {
   const out = args.out ? path.resolve(args.out) : path.join(PATHS.reports, `${generatedAt.slice(0, 10)}.html`);
   const anchors = { publishedAt: generatedAt, report: path.relative(path.dirname(PATHS.anchors), out) };
   for (const l of inputs.ledgers) anchors[l.label] = { entries: l.entries.length, lastHash: l.entries.at(-1)?.hash ?? null };
+  anchors.registry = registryAnchor(inputs.registry);
   if (args['dry-run']) {
     console.log(JSON.stringify({ ...summary, dryRun: true, wouldWrite: out, anchors }, null, 2));
     return;

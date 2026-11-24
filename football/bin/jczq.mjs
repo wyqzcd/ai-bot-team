@@ -19,6 +19,9 @@ import { mapLiveResponse } from '../../scripts/jczq-board.mjs';
 import { PATHS, refsFor } from '../src/config.mjs';
 import { loadDataset } from '../src/dataset.mjs';
 import { datasetTeamSets, loadTeamMap, resolveJczq, summarize } from '../src/jczq.mjs';
+import { loadRegistry } from '../src/rules.mjs';
+import { currentTiers, tierOf } from '../src/tiers.mjs';
+import { ledgerLabel } from '../src/pipeline.mjs';
 import { appendEntries, readLedger } from '../src/ledger.mjs';
 import { LiveError, planPredictions } from '../src/live.mjs';
 import { CliError, now, parseArgs, run } from '../src/cli.mjs';
@@ -101,9 +104,11 @@ run(async () => {
     throw error;
   }
   const refById = new Map(ready.map((r) => [r.id, r.ref]));
+  const tiers = currentTiers(loadRegistry(PATHS.registry), ledgerLabel(PATHS.backtestLedger));
   for (const e of sealed) {
     const ref = refById.get(e.id);
-    console.log(`  ${ref.no} ${ref.home} vs ${ref.away}  ${PICK[e.pick]} conf=${e.conf}  胜/平/负=${e.probs.join('/')}  TOP3=${e.top3.map((s) => s[0]).join(',')}`);
+    const tier = tierOf(e.conf, tiers);
+    console.log(`  ${ref.no} ${ref.home} vs ${ref.away}  ${PICK[e.pick]} conf=${e.conf}${tier ? `  【${tier.label}档 ${tier.rule.id}】` : ''}  胜/平/负=${e.probs.join('/')}  TOP3=${e.top3.map((s) => s[0]).join(',')}`);
   }
   if (args['dry-run']) {
     console.log('（dry-run：未写入台账）');

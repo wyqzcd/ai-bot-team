@@ -322,6 +322,50 @@
       "reviewAt": {
         "n": 100
       }
+    },
+    {
+      "id": "R-015",
+      "title": "精选档（模型最大概率 ≥ 0.72）方向命中，留出段（v3 台账）",
+      "status": "active",
+      "tier": "elite",
+      "definition": "同 R-009 的方向命中口径，只统计 conf ≥ 0.72 的场次。阈值由 football/bin/calibrate.mjs --target 0.80 只在训练段（开赛 < 2024-07-01）选出：训练段命中 ≥ 80% 的最小阈值（训练段 80.11%，n=367，覆盖 4.10%）。留出段只报告，不回头调参。",
+      "sample": {
+        "ledger": "ledger/backtest-v3.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "minConf": 0.72
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-015",
+      "selection": "node football/bin/calibrate.mjs --target 0.80 --split 2024-07-01",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.8571,
+        "n": 147
+      },
+      "baseline": "覆盖率 4.08%（147/3602，约每个比赛周 1~2 场）。同样本赔率热门 85.71%——这一档模型与市场选的是同一批强队主场/客场大热，两者完全一致；平均隐含概率 79.4%，热门赔率中位数 1.20。95% 置信区间约 79%~90%。分赛季：2024-25 为 85.1%（n=74），2025-26 为 85.3%（n=68）。错判 21 场中 11 场是平局。",
+      "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-016",
+      "title": "实盘精选档（conf ≥ 0.72）方向命中",
+      "status": "candidate",
+      "definition": "同 R-015 口径，但只统计 mode=live（真实赛前发布、开赛锁定）的预测；竞彩场次通过 football/bin/jczq.mjs 入账。",
+      "sample": {
+        "ledger": "ledger/live.jsonl",
+        "filter": {
+          "mode": "live",
+          "minConf": 0.72
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --ledger football/ledger/live.jsonl --filter '{\"mode\":\"live\",\"minConf\":0.72}'",
+      "claim": null,
+      "reviewAt": {
+        "n": 100
+      },
+      "note": "实盘精选档样本尚未积累。按每周 1~2 场，攒到 100 场约需一个赛季；到期必须裁决（G6 强制）。",
+      "registeredAt": "2026-11-24"
     }
   ]
 }

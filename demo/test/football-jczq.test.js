@@ -129,11 +129,12 @@ test('发布页展示竞彩编号与中文队名', () => {
     createdAt: '2026-11-27T00:00:00Z', mode: 'live', model: 't', lam: [1.5, 1], probs: [0.6, 0.25, 0.15], pick: 'h', conf: 0.6, over25: 0.5,
     totals: [0.2, 0.5, 0.3], top3: [['1-0', 0.1], ['1-1', 0.09], ['2-0', 0.08]], known: true, market: null,
   }, null)];
-  const registry = { rules: [{ id: 'R-001', title: 't', status: 'active', tier: 'high-confidence', definition: 'd', sample: { ledger: 'ledger/live.jsonl', filter: { mode: 'live', minConf: 0.56 } }, recompute: 'x', claim: { metric: 'direction_hit', rate: 0, n: 0 } }] };
+  const rule = (id, tier, minConf) => ({ id, title: 't', status: 'active', tier, definition: 'd', sample: { ledger: 'ledger/bt.jsonl', filter: { mode: 'backtest', minConf } }, recompute: 'x', claim: { metric: 'direction_hit', rate: 0, n: 0 } });
+  const registry = { rules: [rule('R-001', 'high-confidence', 0.53), rule('R-002', 'elite', 0.72)] };
   const gates = { ok: true, gates: [{ id: 'G7', name: '复算一致', ok: true, warnings: [], rules: [] }] };
-  const html = renderReport({ generatedAt: '2026-11-27T00:00:00Z', gates, registry, ledgers: [{ label: 'live', role: 'live', entries }], model: 't', jczqRefs: { 'E0|2026-11-28|Arsenal|Chelsea': { no: '周六001', home: '阿森纳', away: '切尔西' } } });
+  const html = renderReport({ generatedAt: '2026-11-27T00:00:00Z', gates, registry, ledgers: [{ label: 'bt', role: 'backtest', entries: [] }, { label: 'live', role: 'live', entries }], model: 't', jczqRefs: { 'E0|2026-11-28|Arsenal|Chelsea': { no: '周六001', home: '阿森纳', away: '切尔西' } } });
   assert.match(html, /周六001/);
   assert.match(html, /阿森纳 vs 切尔西/);
   assert.match(html, /2026-11-28 23:00/, '开赛时间按北京时间展示');
-  assert.match(html, /<b>是<\/b>（≥ 0.56）/);
+  assert.match(html, /<b>高置信<\/b>（≥ 0.53，R-001）/, 'conf 0.6：高置信档，未到精选档');
 });

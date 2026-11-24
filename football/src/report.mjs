@@ -8,6 +8,7 @@ import { LEAGUES } from './dataset.mjs';
 import { foldLedger } from './ledger.mjs';
 import { computeStats, coverageCurve, review } from './metrics.mjs';
 import { effectiveStatus } from './rules.mjs';
+import { currentTiers, tierOf } from './tiers.mjs';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const pct = (value) => (value === null || value === undefined ? '—' : `${(value * 100).toFixed(2)}%`);
@@ -48,8 +49,8 @@ export function renderReport({ generatedAt, gates, registry, ledgers, model, jcz
 
   // 高置信档口径只从登记表的 active 规则读，不在这里硬编码阈值。
   const backtestLabel = ledgers.find((l) => l.role === 'backtest')?.label;
-  const tiers = active.filter(({ rule }) => rule.tier === 'high-confidence').map(({ rule }) => rule);
-  const highTier = tiers.find((rule) => path.basename(rule.sample.ledger, '.jsonl') === backtestLabel) ?? tiers.at(-1) ?? null;
+  const tiers = currentTiers(registry, backtestLabel);
+  const highTier = tiers.high;
   const holdoutFrom = highTier?.sample.filter.from ?? '2024-07-01';
   const curve = backtest ? coverageCurve(backtest, { mode: 'backtest', from: holdoutFrom }) : [];
   const live = ledgers.find((l) => l.role === 'live')?.entries ?? [];
@@ -101,14 +102,14 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
 <div class="scroll">${table(['conf ≥', 'n', '覆盖率', '模型方向命中', '同样本·市场热门'], curve.map((c) => [c.minConf.toFixed(2), c.n, pct(c.coverage), pct(c.direction), pct(c.market_fav_same_sample)]))}</div>
 
 <h2>实盘：待开赛预测（开赛即锁定）</h2>
-<div class="scroll">${table(['竞彩', '开赛 (北京时间)', '联赛', '对阵', '方向', 'conf', '高置信档', '胜/平/负', 'λ', '比分 TOP3', '#'], upcoming.map(({ prediction: p }) => {
+<div class="scroll">${table(['竞彩', '开赛 (北京时间)', '联赛', '对阵', '方向', 'conf', '档位', '胜/平/负', 'λ', '比分 TOP3', '#'], upcoming.map(({ prediction: p }) => {
     const ref = jczqRefs[p.id];
     const kickoff08 = new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
-    const high = highTier && p.conf >= highTier.sample.filter.minConf;
+    const tier = tierOf(p.conf, tiers);
     return [
       ref ? esc(ref.no) : '<span class="muted">—</span>', esc(kickoff08), esc(LEAGUES[p.league] ?? p.league),
       ref ? `${esc(ref.home)} vs ${esc(ref.away)}<br><span class="muted">${esc(p.home)} vs ${esc(p.away)}</span>` : `${esc(p.home)} vs ${esc(p.away)}`,
-      PICK_LABEL[p.pick], pct(p.conf), high ? `<b>是</b>（≥ ${highTier.sample.filter.minConf}）` : '<span class="muted">否</span>',
+      PICK_LABEL[p.pick], pct(p.conf), tier ? `<b>${tier.label}</b>（≥ ${tier.rule.sample.filter.minConf}，${esc(tier.rule.id)}）` : '<span class="muted">—</span>',
       p.probs.map(pct).join(' / '), p.lam.join(' / '), p.top3.map((s) => esc(s[0])).join(', '), p.seq,
     ];
   }))}</div>

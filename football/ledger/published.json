@@ -1,5 +1,5 @@
 {
-  "publishedAt": "2026-11-24T14:40:00Z",
+  "publishedAt": "2026-11-24T14:50:00Z",
   "report": "../reports/2026-11-24.html",
   "backtest-v3": {
     "entries": 25114,
@@ -85,6 +85,14 @@
     "R-014": {
       "status": "candidate",
       "fingerprint": "3989ce75a6ee7482"
+    },
+    "R-015": {
+      "status": "active",
+      "fingerprint": "d6bd66afa381e547"
+    },
+    "R-016": {
+      "status": "candidate",
+      "fingerprint": "6d8f59f6a2ed0e54"
     }
   }
 }

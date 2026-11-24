@@ -6,6 +6,7 @@
  * 用法：node football/bin/build-dataset.mjs --raw <Matches.csv> [--from 2017-07-01] [--out football/data/big5.csv]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { parseCsv, toCsv } from '../src/csv.mjs';
 import { DATASET_COLUMNS, DEFAULT_DATASET, LEAGUES, canonicalTeam } from '../src/dataset.mjs';
 
@@ -42,8 +43,23 @@ const rows = parseCsv(readFileSync(raw, 'utf8'))
     odd_under25: row.Under25,
     hst: intText(row.HomeTarget),
     ast: intText(row.AwayTarget),
+    home_elo: row.HomeElo,
+    away_elo: row.AwayElo,
   }))
   .sort((a, b) => (a.date + a.time + a.league + a.home < b.date + b.time + b.league + b.home ? -1 : 1));
 
 writeFileSync(out, toCsv(DATASET_COLUMNS, rows));
+
+// 各队最新 ClubElo 快照（全部联赛，不止五大联赛）：给欧冠等跨联赛比赛用。
+const latest = new Map();
+for (const row of parseCsv(readFileSync(raw, 'utf8'))) {
+  for (const [team, elo] of [[row.HomeTeam, row.HomeElo], [row.AwayTeam, row.AwayElo]]) {
+    if (!elo || !team) continue;
+    const name = canonicalTeam(team);
+    const prev = latest.get(name);
+    if (!prev || row.MatchDate >= prev.date) latest.set(name, { team: name, division: row.Division, date: row.MatchDate, elo: Number(elo).toFixed(2) });
+  }
+}
+const eloOut = path.join(path.dirname(out), 'elo-latest.csv');
+writeFileSync(eloOut, toCsv(['team', 'division', 'date', 'elo'], [...latest.values()].sort((a, b) => (a.team < b.team ? -1 : 1))));
 console.log(JSON.stringify({ out, rows: rows.length, from, to: rows.at(-1)?.date }));

@@ -35,6 +35,7 @@ export const DATASET_COLUMNS = [
   'fthg', 'ftag', 'hthg', 'htag',
   'odd_h', 'odd_d', 'odd_a', 'odd_over25', 'odd_under25',
   'hst', 'ast',
+  'home_elo', 'away_elo',
 ];
 
 function num(value) {
@@ -70,6 +71,8 @@ export function toMatch(row) {
     oddsOU: num(row.odd_over25) && num(row.odd_under25) ? [num(row.odd_over25), num(row.odd_under25)] : null,
     // 射正（shots on target）：只作为球队强弱的第二信号进模型，缺失则该场不参与射正评分。
     sot: num(row.hst) === null || num(row.ast) === null ? null : { h: num(row.hst), a: num(row.ast) },
+    // 赛前 ClubElo 评分（跨联赛可比）：只给 Elo 候选模型用，泊松模型不用。
+    elo: num(row.home_elo) === null || num(row.away_elo) === null ? null : { h: num(row.home_elo), a: num(row.away_elo) },
   };
 }
 

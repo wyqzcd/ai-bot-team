@@ -1,0 +1,149 @@
+{
+  "$comment": "UEFA 球队编号 → ClubElo 快照（data/elo-latest.csv）队名。精确对照，elo 为 null 表示快照里没有该队（或无法确认是同一队），不出预测、不猜。",
+  "teams": {
+    "50129": {
+      "uefa": "AEK Athens",
+      "elo": "AEK"
+    },
+    "52280": {
+      "uefa": "Arsenal",
+      "elo": "Arsenal"
+    },
+    "52683": {
+      "uefa": "Aston Villa",
+      "elo": "Aston Villa"
+    },
+    "50124": {
+      "uefa": "Atleti",
+      "elo": "Ath Madrid"
+    },
+    "52758": {
+      "uefa": "B. Dortmund",
+      "elo": "Dortmund"
+    },
+    "50080": {
+      "uefa": "Barcelona",
+      "elo": "Barcelona"
+    },
+    "50037": {
+      "uefa": "Bayern München",
+      "elo": "Bayern Munich"
+    },
+    "59333": {
+      "uefa": "Bodø/Glimt",
+      "elo": null
+    },
+    "50043": {
+      "uefa": "Club Brugge",
+      "elo": "Club Brugge"
+    },
+    "79946": {
+      "uefa": "Como",
+      "elo": "Como"
+    },
+    "52692": {
+      "uefa": "Fenerbahçe",
+      "elo": "Fenerbahce"
+    },
+    "52749": {
+      "uefa": "Feyenoord",
+      "elo": "Feyenoord"
+    },
+    "50067": {
+      "uefa": "Galatasaray",
+      "elo": "Galatasaray"
+    },
+    "50138": {
+      "uefa": "Inter",
+      "elo": "Inter"
+    },
+    "63405": {
+      "uefa": "LASK",
+      "elo": "LASK"
+    },
+    "2603790": {
+      "uefa": "Leipzig",
+      "elo": "RB Leipzig"
+    },
+    "52277": {
+      "uefa": "Lens",
+      "elo": "Lens"
+    },
+    "75797": {
+      "uefa": "Lille",
+      "elo": "Lille"
+    },
+    "7889": {
+      "uefa": "Liverpool",
+      "elo": "Liverpool"
+    },
+    "52919": {
+      "uefa": "Man City",
+      "elo": "Man City"
+    },
+    "52682": {
+      "uefa": "Man Utd",
+      "elo": "Man United"
+    },
+    "50136": {
+      "uefa": "Napoli",
+      "elo": "Napoli"
+    },
+    "50062": {
+      "uefa": "PSV",
+      "elo": "PSV Eindhoven"
+    },
+    "52747": {
+      "uefa": "Paris",
+      "elo": "Paris SG"
+    },
+    "50064": {
+      "uefa": "Porto",
+      "elo": "Porto"
+    },
+    "52265": {
+      "uefa": "Real Betis",
+      "elo": "Betis"
+    },
+    "50051": {
+      "uefa": "Real Madrid",
+      "elo": "Real Madrid"
+    },
+    "50137": {
+      "uefa": "Roma",
+      "elo": "Roma"
+    },
+    "52797": {
+      "uefa": "S. Bratislava",
+      "elo": null
+    },
+    "2609356": {
+      "uefa": "Sabah",
+      "elo": null
+    },
+    "52707": {
+      "uefa": "Shakhtar",
+      "elo": null
+    },
+    "52498": {
+      "uefa": "Slavia Praha",
+      "elo": null
+    },
+    "50149": {
+      "uefa": "Sporting CP",
+      "elo": "Sp Lisbon"
+    },
+    "50107": {
+      "uefa": "Stuttgart",
+      "elo": "Stuttgart"
+    },
+    "52319": {
+      "uefa": "Viking",
+      "elo": "Viking"
+    },
+    "70691": {
+      "uefa": "Villarreal",
+      "elo": "Villarreal"
+    }
+  }
+}

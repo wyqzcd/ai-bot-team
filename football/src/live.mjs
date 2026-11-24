@@ -55,7 +55,7 @@ export function buildHistory(datasetMatches, liveEntries) {
   return history;
 }
 
-function precheck(existing, additions) {
+export function precheckAppend(existing, additions) {
   let previous = existing.at(-1) ?? null;
   const sealed = additions.map((entry) => {
     previous = seal(entry, previous);
@@ -111,7 +111,7 @@ export function planPredictions({ fixtures, dataset, liveEntries, now, replace =
     const pred = predictMatch(model, fixture);
     additions.push(predictionEntry({ match: fixture, createdAt: now, mode: 'live', model: `${MODEL_NAME}@${MODEL_VERSION}`, pred, market: fixture.odds }));
   }
-  return precheck(liveEntries, additions);
+  return precheckAppend(liveEntries, additions);
 }
 
 export function parseScore(text, label) {
@@ -127,12 +127,12 @@ export function planResult({ liveEntries, id, ft, ht = null, now, source }) {
   const kickoff = (item.prediction ?? item.voided.at(-1)).kickoff;
   if (Date.parse(now) < Date.parse(kickoff) + MIN_RESULT_MINUTES * 60000) throw new LiveError(`${id}: 开赛 ${kickoff} 后 ${MIN_RESULT_MINUTES} 分钟内不能录完场赛果`);
   if (typeof source !== 'string' || source.trim() === '') throw new LiveError('必须写明赛果来源 --source');
-  return precheck(liveEntries, [resultEntry({ id, ft, ht, recordedAt: now, source: source.trim() })]);
+  return precheckAppend(liveEntries, [resultEntry({ id, ft, ht, recordedAt: now, source: source.trim() })]);
 }
 
 export function planRetraction({ liveEntries, seq, reason, now }) {
   const target = liveEntries.find((e) => e.seq === seq);
   if (!target || target.type !== 'prediction') throw new LiveError(`#${seq} 不存在或不是预测`);
   if (typeof reason !== 'string' || reason.trim().length < 4) throw new LiveError('撤回必须写明原因（≥4 字）');
-  return precheck(liveEntries, [retractionEntry({ target: seq, id: target.id, reason: reason.trim(), createdAt: now })]);
+  return precheckAppend(liveEntries, [retractionEntry({ target: seq, id: target.id, reason: reason.trim(), createdAt: now })]);
 }

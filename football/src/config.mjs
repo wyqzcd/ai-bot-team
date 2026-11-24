@@ -5,6 +5,8 @@ import { FOOTBALL_ROOT } from './dataset.mjs';
 export const BACKTEST_FROM = '2019-07-01';
 /** 回测窗口上界固定：以后扩充样本库不会让当前台账"缺场"；要覆盖新比赛就生成新版本台账。 */
 export const BACKTEST_TO = '2026-09-03';
+/** Elo 模型的留出段起点（参数只用此前的比赛拟合）。 */
+export const ELO_HOLDOUT_FROM = '2024-07-01';
 /**
  * 当前回测台账。台账一经发布即冻结：数据或模型口径变了，就生成新版本文件，旧文件原样保留
  * （只做 G1~G4 与发布锚点校验，不再做覆盖率校验，依赖它的规则改为 retracted 留痕）。
@@ -20,6 +22,9 @@ export const FROZEN_LEDGERS = [
 export const PATHS = {
   backtestLedger: path.join(FOOTBALL_ROOT, 'ledger', 'backtest-v3.jsonl'),
   liveLedger: path.join(FOOTBALL_ROOT, 'ledger', 'live.jsonl'),
+  // Elo 泊松模型：五大联赛留出段回测（参数只用训练段），以及欧冠候选台账（无欧冠回测，只作候选）。
+  eloBacktestLedger: path.join(FOOTBALL_ROOT, 'ledger', 'backtest-elo.jsonl'),
+  uclLedger: path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate.jsonl'),
   anchors: path.join(FOOTBALL_ROOT, 'ledger', 'published.json'),
   // 竞彩编号/中文队名旁注：只用于发布页展示，不参与统计，不进哈希链。
   jczqRefs: path.join(FOOTBALL_ROOT, 'ledger', 'jczq-refs.json'),

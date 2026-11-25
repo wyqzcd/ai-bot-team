@@ -1,5 +1,5 @@
 {
-  "publishedAt": "2026-11-25T12:26:53Z",
+  "publishedAt": "2026-11-25T14:32:26Z",
   "report": "../reports/2026-11-25.html",
   "backtest-v3": {
     "entries": 25114,
@@ -83,8 +83,9 @@
       "fingerprint": "7c6074680d5aa2e4"
     },
     "R-014": {
-      "status": "candidate",
-      "fingerprint": "3989ce75a6ee7482"
+      "status": "retracted",
+      "fingerprint": "3989ce75a6ee7482",
+      "retraction": "294ddd9f2731cb09"
     },
     "R-015": {
       "status": "active",
@@ -93,6 +94,18 @@
     "R-016": {
       "status": "candidate",
       "fingerprint": "6d8f59f6a2ed0e54"
+    },
+    "R-017": {
+      "status": "candidate",
+      "fingerprint": "8e06f627b5d0c921"
+    },
+    "R-018": {
+      "status": "active",
+      "fingerprint": "07fab47a12354ae7"
+    },
+    "R-019": {
+      "status": "active",
+      "fingerprint": "57c1149b7ffa9a15"
     }
   }
 }

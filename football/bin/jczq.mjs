@@ -14,13 +14,13 @@
  * 退出码：0 成功；2 用法错误；3 输入文件不存在/非法；5 未映射或预检失败。
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { loadBoardFixture } from '../src/board-input.mjs';
 import path from 'node:path';
-import { mapLiveResponse } from '../../scripts/jczq-board.mjs';
 import { PATHS, refsFor } from '../src/config.mjs';
 import { loadDataset } from '../src/dataset.mjs';
 import { datasetTeamSets, loadTeamMap, resolveJczq, summarize } from '../src/jczq.mjs';
 import { loadRegistry } from '../src/rules.mjs';
-import { currentTiers, tierOf } from '../src/tiers.mjs';
+import { abstainOf, currentAbstain, currentTiers, tierOf } from '../src/tiers.mjs';
 import { ledgerLabel } from '../src/pipeline.mjs';
 import { appendEntries, readLedger } from '../src/ledger.mjs';
 import { LiveError, planPredictions } from '../src/live.mjs';
@@ -28,39 +28,6 @@ import { CliError, now, parseArgs, run } from '../src/cli.mjs';
 
 const STATUS_LABEL = { ready: '待预测', not_covered: '未建模', unmapped: '未映射', locked: '已锁定', already: '已预测', settled: '已结算' };
 const PICK = { h: '主胜', d: '平', a: '客胜' };
-
-function readJson(file) {
-  if (!existsSync(file)) throw new CliError(`文件不存在：${file}`, 3);
-  try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch (error) {
-    throw new CliError(`JSON 非法：${file}（${error.message}）`, 3);
-  }
-}
-
-function loadBoardFixture(args, at) {
-  const inputs = ['date', 'raw', 'fixture'].filter((k) => args[k]);
-  if (inputs.length !== 1) throw new CliError('必须且只能指定 --date / --raw / --fixture 之一');
-  let rawFile = args.raw ? path.resolve(args.raw) : null;
-  let fixtureFile = args.fixture ? path.resolve(args.fixture) : null;
-  if (args.date) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new CliError('--date 必须是 YYYY-MM-DD');
-    const raw = path.join(PATHS.jczqFixtures, `${args.date}.live-raw.json`);
-    const fixture = path.join(PATHS.jczqFixtures, `${args.date}.json`);
-    if (existsSync(raw)) rawFile = raw;
-    else if (existsSync(fixture)) fixtureFile = fixture;
-    else throw new CliError(`找不到 ${raw} 或 ${fixture}；先在能访问竞彩官网的机器上跑 node scripts/jczq-board.mjs --live`, 3);
-  }
-  if (rawFile) {
-    try {
-      return { source: rawFile, fixture: mapLiveResponse(readJson(rawFile), { capturedAt: at, source: rawFile }) };
-    } catch (error) {
-      if (error instanceof CliError) throw error;
-      throw new CliError(`官方响应解析失败：${error.message}`, 3);
-    }
-  }
-  return { source: fixtureFile, fixture: readJson(fixtureFile) };
-}
 
 run(async () => {
   const args = parseArgs(process.argv.slice(2), { flags: ['check', 'dry-run', 'skip-unmapped'], options: ['date', 'raw', 'fixture', 'ledger'] });
@@ -104,11 +71,15 @@ run(async () => {
     throw error;
   }
   const refById = new Map(ready.map((r) => [r.id, r.ref]));
-  const tiers = currentTiers(loadRegistry(PATHS.registry), ledgerLabel(PATHS.backtestLedger));
+  const registry = loadRegistry(PATHS.registry);
+  const tiers = currentTiers(registry, ledgerLabel(PATHS.backtestLedger));
+  const abstainRule = currentAbstain(registry, ledgerLabel(PATHS.backtestLedger));
   for (const e of sealed) {
     const ref = refById.get(e.id);
     const tier = tierOf(e.conf, tiers);
-    console.log(`  ${ref.no} ${ref.home} vs ${ref.away}  ${PICK[e.pick]} conf=${e.conf}${tier ? `  【${tier.label}档 ${tier.rule.id}】` : ''}  胜/平/负=${e.probs.join('/')}  TOP3=${e.top3.map((s) => s[0]).join(',')}`);
+    const abstain = abstainOf(e.probs, abstainRule);
+    const call = abstain ? `不下判断（概率差 ${abstain.margin.toFixed(3)} < ${abstainRule.sample.filter.maxMargin}，${abstainRule.id}；台账照记 ${PICK[e.pick]}）` : PICK[e.pick];
+    console.log(`  ${ref.no} ${ref.home} vs ${ref.away}  ${call} conf=${e.conf}${tier ? `  【${tier.label}档 ${tier.rule.id}】` : ''}  胜/平/负=${e.probs.join('/')}  TOP3=${e.top3.map((s) => s[0]).join(',')}`);
   }
   if (args['dry-run']) {
     console.log('（dry-run：未写入台账）');

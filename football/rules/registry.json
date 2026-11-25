@@ -307,7 +307,7 @@
     {
       "id": "R-014",
       "title": "欧冠方向（Elo 泊松模型，候选）",
-      "status": "candidate",
+      "status": "retracted",
       "definition": "欧冠联赛阶段比赛：UEFA 官方赛程（football/fixtures/ucl/）+ ClubElo 快照（data/elo-latest.csv，任一方超过 120 天不出预测）+ R-012 的模型参数，开赛前写入 ledger/ucl-candidate.jsonl。",
       "sample": {
         "ledger": "ledger/ucl-candidate.jsonl",
@@ -321,6 +321,11 @@
       "registeredAt": "2026-11-24",
       "reviewAt": {
         "n": 100
+      },
+      "retraction": {
+        "date": "2026-11-25",
+        "reason": "口径被 R-017 取代：欧冠候选改用推算 Elo（ClubElo 快照 + 五大联赛新比分，data/elo-current.csv）。快照口径从 2026-11-26 起停止出新预测；已发布的 12 场（11-24 七场、11-25 五场）原样保留在 ledger/ucl-candidate.jsonl，照常补录赛果。没有命中率结论被撤回（本规则从未有 claim）。",
+        "replacedBy": "R-017"
       }
     },
     {
@@ -366,6 +371,74 @@
       },
       "note": "实盘精选档样本尚未积累。按每周 1~2 场，攒到 100 场约需一个赛季；到期必须裁决（G6 强制）。",
       "registeredAt": "2026-11-24"
+    },
+    {
+      "id": "R-017",
+      "title": "欧冠方向（Elo 泊松模型 + 推算 Elo，候选）",
+      "status": "candidate",
+      "definition": "欧冠联赛阶段比赛：UEFA 官方赛程（football/fixtures/ucl/）+ 推算 Elo（data/elo-current.csv：ClubElo 快照之后用五大联赛新比分按 Elo 公式推算，K=15、计净胜球，参数由 football/bin/elo-update.mjs --select 只在训练窗口选出，见 data/elo-update.json；任一方评分超过 120 天不出预测）+ R-012 的模型参数，开赛前写入 ledger/ucl-candidate-v2.jsonl，开赛即锁定。",
+      "sample": {
+        "ledger": "ledger/ucl-candidate-v2.jsonl",
+        "filter": {
+          "mode": "live"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --ledger football/ledger/ucl-candidate-v2.jsonl --filter '{\"mode\":\"live\"}'",
+      "selection": "node football/bin/elo-update.mjs --select",
+      "claim": null,
+      "note": "推算 Elo 在五大联赛留出窗口（2024-25、2025-26 赛季，每季 4 个截断日、各 90 天，n=4273）上对数损失 0.9961→0.9929（配对 z=2.95），补回了冻结快照与真实 ClubElo（0.9925）差距的约九成；方向命中没有变化（51.56%→51.53%）。只推五大联赛球队，欧战杯赛不进推算，其余联赛球队保持快照原值并继续变旧；欧冠没有任何回测样本。只作候选记录，不作结论。",
+      "registeredAt": "2026-11-25",
+      "reviewAt": {
+        "n": 100
+      }
+    },
+    {
+      "id": "R-018",
+      "title": "不下判断档（第一、第二选择概率差 < 0.06），留出段（v3 台账）",
+      "status": "active",
+      "tier": "abstain",
+      "definition": "概率差 margin = 模型最大概率 − 第二大概率。margin < 0.06 的场次不给方向（台账照常记录预测，只是发布时标为\"不下判断\"，不计入任何档位）。本规则登记的是这批场次的方向命中，用来证明它们确实不该下判断。阈值由 football/bin/abstain.mjs 的固定流程只在训练段（开赛 < 2024-07-01）选出：margin 从 0.01 起每次放宽 0.01，第一次出现\"第一选择命中显著多于第二选择\"（单侧 z ≥ 1.645）之前的最后一个值。训练段：n=1346（15.03%），第一选择 36.33%、第二选择 34.55%，z=0.78。",
+      "sample": {
+        "ledger": "ledger/backtest-v3.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "maxMargin": 0.06
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-018",
+      "selection": "node football/bin/abstain.mjs --ledger football/ledger/backtest-v3.jsonl --split 2024-07-01",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.3616,
+        "n": 567
+      },
+      "baseline": "覆盖率 15.74%（567/3602）。同一批场次模型第二选择命中 35.27%（200/567），z=0.25，两者分不出高下。去掉这批后其余 3035 场方向命中 55.42%（全样本 52.39%）。同样本赔率热门 39.86%（226/567）：模型拿不准的场次，市场有时是有看法的——这类场次以赔率为准，模型不出方向。",
+      "registeredAt": "2026-11-25"
+    },
+    {
+      "id": "R-019",
+      "title": "Elo 泊松模型不下判断档（概率差 < 0.04），五大联赛留出段",
+      "status": "active",
+      "tier": "abstain",
+      "definition": "同 R-018 的口径与选阈值流程，模型为 elo-poisson@0.1.0（欧冠候选 R-017 用的模型）。训练段为 2017-07~2024-06 五大联赛（与模型参数同一段，台账只有留出段，训练段预测由 abstain.mjs --elo 现算）：阈值 0.04，n=1130（8.96%），第一选择 36.90%、第二选择 32.92%，z=1.60（0.05 时 z=2.63 已显著）。",
+      "sample": {
+        "ledger": "ledger/backtest-elo.jsonl",
+        "filter": {
+          "mode": "backtest",
+          "from": "2024-07-01",
+          "maxMargin": 0.04
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --rule R-019",
+      "selection": "node football/bin/abstain.mjs --elo",
+      "claim": {
+        "metric": "direction_hit",
+        "rate": 0.3867,
+        "n": 300
+      },
+      "baseline": "覆盖率 8.33%（300/3600）。同一批场次第二选择命中 36.00%（108/300），z=0.53。去掉这批后其余 3300 场方向命中 53.39%（全样本 52.17%）。同样本赔率热门 45.67%（137/300），市场明显更有把握。欧冠没有回测样本，用于欧冠只是沿用。",
+      "registeredAt": "2026-11-25"
     }
   ]
 }

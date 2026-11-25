@@ -56,10 +56,12 @@ jobs:
           set -o pipefail
           node football/bin/backtest.mjs
           node football/bin/elo-backtest.mjs
+          node football/bin/elo-update.mjs --select > /dev/null
+          node football/bin/elo-update.mjs > /dev/null
           node football/bin/stats.mjs --all > /dev/null
           git diff --exit-code --stat -- football/ledger football/data
           mkdir -p config/verification
-          node -e "require('fs').writeFileSync('config/verification/pr-${{ github.event.pull_request.number }}.json', JSON.stringify({ pr: ${{ github.event.pull_request.number }}, sha: '${{ github.event.pull_request.head.sha }}', checkedAt: new Date().toISOString(), checks: ['backtest-v3 逐字节重算一致', 'backtest-elo 与 elo-model.json 逐字节重算一致', 'active 规则全部复算一致'], result: 'pass' }, null, 2))"
+          node -e "require('fs').writeFileSync('config/verification/pr-${{ github.event.pull_request.number }}.json', JSON.stringify({ pr: ${{ github.event.pull_request.number }}, sha: '${{ github.event.pull_request.head.sha }}', checkedAt: new Date().toISOString(), checks: ['backtest-v3 逐字节重算一致', 'backtest-elo 与 elo-model.json 逐字节重算一致', 'elo-update.json 选参与 elo-current.csv 推算逐字节重算一致', 'active 规则全部复算一致'], result: 'pass' }, null, 2))"
 
       # 可选：官方 Claude 做额外的行为验证（只作参考，不影响评分）。需要 Secrets.ANTHROPIC_API_KEY 且 Variables.QA_AGENT_ENABLED == "true"。
       - name: Claude QA Agent（可选，仅官方 API）

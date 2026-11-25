@@ -40,6 +40,12 @@ export function marketPick(odds) {
   return PICKS[argmax(odds.map((o) => 1 / o))];
 }
 
+/** 第一选择与第二选择的概率差（"不下判断"规则用）。 */
+export function marginOf(probs) {
+  const sorted = [...probs].sort((a, b) => b - a);
+  return Math.round((sorted[0] - sorted[1]) * 1e6) / 1e6;
+}
+
 /** 样本口径过滤器：所有字段可选，全部满足才入样本。 */
 export function matchesFilter(prediction, filter = {}) {
   const date = prediction.kickoff.slice(0, 10);
@@ -50,6 +56,8 @@ export function matchesFilter(prediction, filter = {}) {
   if (filter.minConf !== undefined && !(prediction.conf >= filter.minConf)) return false;
   if (filter.maxConf !== undefined && !(prediction.conf < filter.maxConf)) return false;
   if (filter.picks && !filter.picks.includes(prediction.pick)) return false;
+  if (filter.minMargin !== undefined && !(marginOf(prediction.probs) >= filter.minMargin)) return false;
+  if (filter.maxMargin !== undefined && !(marginOf(prediction.probs) < filter.maxMargin)) return false;
   if (filter.knownOnly && !prediction.known) return false;
   return true;
 }
@@ -83,7 +91,7 @@ const r4 = (value) => (value === null ? null : Math.round(value * 1e4) / 1e4);
 
 export function computeStats(entries, filter = {}) {
   const all = settled(entries);
-  const universe = all.filter((item) => matchesFilter(item.prediction, { ...filter, minConf: undefined, maxConf: undefined, picks: undefined }));
+  const universe = all.filter((item) => matchesFilter(item.prediction, { ...filter, minConf: undefined, maxConf: undefined, picks: undefined, minMargin: undefined, maxMargin: undefined }));
   const sample = universe.filter((item) => matchesFilter(item.prediction, filter));
   const evals = sample.map(evaluate);
   const count = (key) => evals.filter((e) => e[key] === true).length;

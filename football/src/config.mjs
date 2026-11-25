@@ -24,7 +24,10 @@ export const PATHS = {
   liveLedger: path.join(FOOTBALL_ROOT, 'ledger', 'live.jsonl'),
   // Elo 泊松模型：五大联赛留出段回测（参数只用训练段），以及欧冠候选台账（无欧冠回测，只作候选）。
   eloBacktestLedger: path.join(FOOTBALL_ROOT, 'ledger', 'backtest-elo.jsonl'),
-  uclLedger: path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate.jsonl'),
+  // 欧冠候选台账按评分口径分版本：v1 用 ClubElo 快照（R-014，已停止出新预测，只补录赛果），
+  // v2 用推算 Elo（data/elo-current.csv，R-017）。新预测只写 uclLedger；录赛果在全部版本里找对应预测。
+  uclLedger: path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate-v2.jsonl'),
+  uclLedgers: [path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate.jsonl'), path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate-v2.jsonl')],
   anchors: path.join(FOOTBALL_ROOT, 'ledger', 'published.json'),
   // 竞彩编号/中文队名旁注：只用于发布页展示，不参与统计，不进哈希链。
   jczqRefs: path.join(FOOTBALL_ROOT, 'ledger', 'jczq-refs.json'),

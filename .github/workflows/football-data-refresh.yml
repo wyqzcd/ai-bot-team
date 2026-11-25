@@ -44,6 +44,8 @@ jobs:
           done; done
           node football/bin/build-dataset.mjs --raw "$RUNNER_TEMP/raw/Matches.csv" --source-url "$RAW_URL" \
             --fd-a "$RUNNER_TEMP/fd-a" --fd-b "$RUNNER_TEMP/fd-b" --fd-seasons "$PREV,$CUR"
+          # 用新比分把 Elo 往后推（参数固定在 data/elo-update.json，不在这里重选）
+          node football/bin/elo-update.mjs
 
       - name: 有变化吗
         id: changed
@@ -57,7 +59,8 @@ jobs:
           # 复现验证：新样本库下回测台账必须逐字节不变（上游若改写了历史比赛，这里会失败，转人工）
           node football/bin/backtest.mjs
           node football/bin/elo-backtest.mjs
-          git diff --exit-code --stat -- football/ledger football/data/elo-model.json
+          node football/bin/elo-update.mjs --select > /dev/null
+          git diff --exit-code --stat -- football/ledger football/data/elo-model.json football/data/elo-update.json
           (cd demo && npm test)
           (cd football && npm test)
 

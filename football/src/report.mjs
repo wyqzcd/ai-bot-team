@@ -8,7 +8,8 @@ import { LEAGUES } from './dataset.mjs';
 import { foldLedger } from './ledger.mjs';
 import { computeStats, coverageCurve, review } from './metrics.mjs';
 import { effectiveStatus } from './rules.mjs';
-import { currentTiers, tierOf } from './tiers.mjs';
+import { abstainOf, currentAbstain, currentTiers, tierOf } from './tiers.mjs';
+import { compare, marketScoreboard, preKickoffMarket } from './ucl-market.mjs';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const pct = (value) => (value === null || value === undefined ? '—' : `${(value * 100).toFixed(2)}%`);
@@ -27,7 +28,7 @@ function table(head, rows) {
   }</tbody></table>`;
 }
 
-export function renderReport({ generatedAt, gates, registry, ledgers, model, jczqRefs = {} }) {
+export function renderReport({ generatedAt, gates, registry, ledgers, model, jczqRefs = {}, uclMarket = {} }) {
   const byLabel = Object.fromEntries(ledgers.map((l) => [l.label, l.entries]));
   const backtest = ledgers.find((l) => l.role === 'backtest')?.entries ?? null;
   const rules = registry.rules.map((rule) => ({ rule, status: effectiveStatus(rule) }));
@@ -50,12 +51,14 @@ export function renderReport({ generatedAt, gates, registry, ledgers, model, jcz
   // 高置信档口径只从登记表的 active 规则读，不在这里硬编码阈值。
   const backtestLabel = ledgers.find((l) => l.role === 'backtest')?.label;
   const tiers = currentTiers(registry, backtestLabel);
+  const abstainRule = currentAbstain(registry, backtestLabel);
+  const eloAbstainRule = currentAbstain(registry, ledgers.find((l) => l.role === 'aux')?.label);
   const highTier = tiers.high;
   const holdoutFrom = highTier?.sample.filter.from ?? '2024-07-01';
   const curve = backtest ? coverageCurve(backtest, { mode: 'backtest', from: holdoutFrom }) : [];
   const live = ledgers.find((l) => l.role === 'live')?.entries ?? [];
   const liveFold = foldLedger(live);
-  const ucl = foldLedger(ledgers.find((l) => l.role === 'candidate')?.entries ?? []).filter((x) => x.prediction).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : a.prediction.kickoff > b.prediction.kickoff ? 1 : a.id < b.id ? -1 : 1));
+  const ucl = ledgers.filter((l) => l.role === 'candidate').flatMap((l) => foldLedger(l.entries).map((x) => ({ ...x, label: l.label }))).filter((x) => x.prediction).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : a.prediction.kickoff > b.prediction.kickoff ? 1 : a.id < b.id ? -1 : 1));
   const upcoming = liveFold.filter((x) => x.prediction && !x.result).sort((a, b) => (a.prediction.kickoff < b.prediction.kickoff ? -1 : 1));
   const liveStats = computeStats(live, { mode: 'live' });
   const liveReview = review(live, { mode: 'live' });
@@ -106,20 +109,41 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
     const ref = jczqRefs[p.id];
     const kickoff08 = new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
     const tier = tierOf(p.conf, tiers);
+    const abstain = abstainOf(p.probs, abstainRule);
     return [
       ref ? esc(ref.no) : '<span class="muted">—</span>', esc(kickoff08), esc(LEAGUES[p.league] ?? p.league),
       ref ? `${esc(ref.home)} vs ${esc(ref.away)}<br><span class="muted">${esc(p.home)} vs ${esc(p.away)}</span>` : `${esc(p.home)} vs ${esc(p.away)}`,
-      PICK_LABEL[p.pick], pct(p.conf), tier ? `<b>${tier.label}</b>（≥ ${tier.rule.sample.filter.minConf}，${esc(tier.rule.id)}）` : '<span class="muted">—</span>',
+      abstain ? `<b>不下判断</b><br><span class="muted">台账记 ${PICK_LABEL[p.pick]}</span>` : PICK_LABEL[p.pick], pct(p.conf),
+      abstain ? `<span class="muted">概率差 ${abstain.margin.toFixed(3)} &lt; ${abstainRule.sample.filter.maxMargin}（${esc(abstainRule.id)}）</span>` : tier ? `<b>${tier.label}</b>（≥ ${tier.rule.sample.filter.minConf}，${esc(tier.rule.id)}）` : '<span class="muted">—</span>',
       p.probs.map(pct).join(' / '), p.lam.join(' / '), p.top3.map((s) => esc(s[0])).join(', '), p.seq,
     ];
   }))}</div>
 
 <h2>候选：欧冠方向（不作结论）</h2>
-<div class="card muted">Elo 泊松模型（R-012/R-013 在五大联赛联赛内校准），没有任何欧冠样本回测；Elo 快照约 3 个月前，伤停首发未进模型。只作为候选记录（R-014），开赛即锁定。</div>
-<div class="scroll">${table(['开赛 (北京时间)', '对阵', '方向', 'conf', '胜/平/负', 'λ', '赛果', '#'], ucl.map(({ prediction: p, result: r }) => [
-    esc(new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')), `${esc(p.home)} vs ${esc(p.away)}`, PICK_LABEL[p.pick], pct(p.conf),
-    p.probs.map(pct).join(' / '), p.lam.join(' / '), r ? `${r.ft[0]}-${r.ft[1]}` : '<span class="muted">未赛</span>', p.seq,
-  ]))}</div>
+<div class="card muted">Elo 泊松模型（R-012/R-013 在五大联赛联赛内校准），没有任何欧冠样本回测；伤停首发未进模型。只作为候选记录，开赛即锁定。
+评分口径：ucl-candidate = ClubElo 快照（R-014，已被取代，只补录赛果）；ucl-candidate-v2 = 快照 + 五大联赛新比分推算（R-017）。
+概率差小于 ${eloAbstainRule ? `${eloAbstainRule.sample.filter.maxMargin}（${esc(eloAbstainRule.id)}）` : '—'} 的场次不下判断。
+市场 = 竞彩胜平负赔率去水（开赛前最后一次抓取，只作对照，不进模型）；差 = 模型 − 市场，任一方向差 ≥ 10 个百分点标"分歧大"。</div>
+<div class="scroll">${table(['开赛 (北京时间)', '口径', '对阵', '方向', 'conf', '胜/平/负', '市场', '差（模型−市场）', '赛果', '#'], ucl.map(({ id, label, prediction: p, result: r }) => {
+    const abstain = abstainOf(p.probs, eloAbstainRule);
+    const snap = preKickoffMarket(uclMarket[id] ? { ...uclMarket[id], kickoff: p.kickoff } : null);
+    const cmp = compare(p, snap);
+    const signed = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}`;
+    return [
+      esc(new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')),
+      label.endsWith('-v2') ? '推算 Elo' : '<span class="muted">快照</span>',
+      `${esc(p.home)} vs ${esc(p.away)}${uclMarket[id]?.zh ? `<br><span class="muted">${esc(uclMarket[id].zh.home)} vs ${esc(uclMarket[id].zh.away)}</span>` : ''}`,
+      abstain ? `<b>不下判断</b><br><span class="muted">台账记 ${PICK_LABEL[p.pick]}</span>` : PICK_LABEL[p.pick], pct(p.conf),
+      p.probs.map(pct).join(' / '),
+      cmp ? `${cmp.market.map(pct).join(' / ')}<br><span class="muted">热门 ${PICK_LABEL[cmp.marketPick]}</span>` : '<span class="muted">无赔率</span>',
+      cmp ? `${cmp.diff.map(signed).join(' / ')}${cmp.flagged ? '<br><b>分歧大</b>' : ''}${cmp.agrees ? '' : '<br><b>方向不同</b>'}` : '<span class="muted">—</span>',
+      r ? `${r.ft[0]}-${r.ft[1]}` : '<span class="muted">未赛</span>', p.seq,
+    ];
+  }))}</div>
+${(() => {
+    const sb = marketScoreboard(ucl, uclMarket);
+    return sb.n ? `<div class="card">有赔率且已结算 ${sb.n} 场：模型方向命中 ${sb.model}，竞彩热门命中 ${sb.market}。<span class="muted">样本极小，只作记录。</span></div>` : '<div class="card muted">还没有带赔率的已结算欧冠场次（赔率需在开赛前用 football/bin/ucl-market.mjs 记录）。</div>';
+  })()}
 
 <h2>实盘战绩</h2>
 <div class="card">已结算 ${liveStats.n} 场 · 方向命中 ${pct(liveStats.direction_hit.rate)} · 同样本市场热门 ${pct(liveStats.baselines.market_fav.rate)}（n=${liveStats.baselines.market_fav.n}） · 比分 TOP3 ${pct(liveStats.score_top3_hit.rate)}

@@ -1,0 +1,17 @@
+{
+  "$comment": "竞彩欧冠中文队名 → Elo 队名（data/elo-current.csv）。五大联赛球队直接沿用 data/jczq-teams.json（样本库队名与 Elo 队名相同），这里只放五大联赛之外的欧冠球队。精确匹配，查不到就是未映射、不猜；以下中文名尚未用竞彩实盘核对，跑 football/bin/ucl-market.mjs --check 列出未映射名后补齐。",
+  "version": 1,
+  "leagues": ["欧冠", "欧洲冠军联赛", "欧冠联赛"],
+  "teams": {
+    "Club Brugge": ["布鲁日", "布鲁日俱乐部"],
+    "PSV Eindhoven": ["埃因霍温", "PSV埃因霍温", "埃因霍芬"],
+    "Porto": ["波尔图"],
+    "Galatasaray": ["加拉塔萨雷", "加拉塔萨"],
+    "AEK": ["雅典AEK", "AEK雅典"],
+    "Sp Lisbon": ["葡萄牙体育", "里斯本竞技", "葡萄牙体"],
+    "Viking": ["维京"],
+    "Fenerbahce": ["费内巴切", "费内巴"],
+    "Feyenoord": ["费耶诺德", "费耶诺"],
+    "LASK": ["林茨", "LASK林茨"]
+  }
+}

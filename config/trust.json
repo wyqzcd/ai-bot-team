@@ -7,7 +7,7 @@
   "routineData": {
     "$comment": "例行数据通道：带 bot-authored 标签、只改下列数据文件、CI（测试 + 8 道门禁 + 复现验证）全过、且对照 base 证明台账只追加不改写的 PR，自动 squash 合并。代码/工作流/登记表/对照表不在白名单内，永远走人工 review。紧急关闭：仓库变量 ROUTINE_AUTO_MERGE=false。",
     "enabled": true,
-    "paths": ["football/ledger/", "football/fixtures/", "football/reports/", "football/data/big5.csv", "football/data/elo-latest.csv", "football/data/manifest.json"]
+    "paths": ["football/ledger/", "football/fixtures/", "football/reports/", "football/data/big5.csv", "football/data/elo-latest.csv", "football/data/elo-current.csv", "football/data/manifest.json"]
   },
   "botLabels": ["bot-authored"],
   "blockedLabels": ["bot-review-needed", "do-not-merge"],

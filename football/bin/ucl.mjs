@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * 欧冠（候选）：UEFA 官方赛程 → Elo 泊松模型 → 候选台账 ledger/ucl-candidate.jsonl（开赛即锁定）。
+ * 欧冠（候选）：UEFA 官方赛程 → Elo 泊松模型 → 候选台账 ledger/ucl-candidate-v2.jsonl（开赛即锁定）。
+ * 评分用 data/elo-current.csv（ClubElo 快照 + 五大联赛新比分推算，见 bin/elo-update.mjs）；该文件不存在时退回快照。
  *
  * 该模型只在五大联赛联赛内比赛上校准过，没有欧冠样本可回测，所以这里的预测只是候选（R-013），
- * 不进入结论、不计入实盘规则 R-004。
+ * 不进入结论、不计入实盘规则 R-004（v1 台账口径 R-014，v2 推算口径 R-017）。
  *
  * 用法：
  *   node football/bin/ucl.mjs --fetch --date 2026-11-24   抓 UEFA 官方当天赛程，存 football/fixtures/ucl/<date>.json（精简快照；已存在不覆盖，--refresh 强制重抓）
@@ -11,13 +12,17 @@
  *
  * 口径（出预测前固定）：
  * - 球队按 UEFA 球队编号查 data/uefa-teams.json，再查 data/elo-latest.csv；任一方查不到 → 不出预测。
- * - 任一方 Elo 快照日期早于开赛 MAX_ELO_AGE_DAYS 天 → 评分过旧，不出预测。
- * - 只预测未开赛（now < kickoff）且台账里还没有预测的场次。
+ * - 任一方评分日期（推算到的最后一场比赛；五大联赛之外的球队就是快照日）早于开赛 MAX_ELO_AGE_DAYS 天 → 评分过旧，不出预测。
+ * - 只预测未开赛（now < kickoff）且各版本候选台账里都还没有预测的场次（同一场不重复出）。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PATHS } from '../src/config.mjs';
 import { loadEloLatest, loadEloModel, predictElo } from '../src/elo.mjs';
+import { loadEloCurrent, loadEloUpdate } from '../src/elo-update.mjs';
+import { ledgerLabel, uclLedgerFiles } from '../src/pipeline.mjs';
+import { loadRegistry } from '../src/rules.mjs';
+import { abstainOf, currentAbstain } from '../src/tiers.mjs';
 import { appendEntries, foldLedger, predictionEntry, readLedger } from '../src/ledger.mjs';
 import { LiveError, precheckAppend } from '../src/live.mjs';
 import { UCL_SNAPSHOT_DIR, UEFA_MATCHES_URL, eloNames, loadUefaTeamMap, uclMatchId } from '../src/ucl.mjs';
@@ -81,11 +86,15 @@ run(async () => {
   }
   const snapshot = JSON.parse(readFileSync(snapshotFile, 'utf8'));
   const teamMap = loadUefaTeamMap();
-  const elo = loadEloLatest();
+  const current = loadEloCurrent();
+  const elo = current ?? loadEloLatest();
   const params = loadEloModel();
+  const modelLabel = current ? `${params.model}+${loadEloUpdate().method}` : params.model;
   const ledger = args.ledger ? path.resolve(args.ledger) : UCL_LEDGER;
   const entries = readLedger(ledger);
-  const existing = new Map(foldLedger(entries).map((x) => [x.id, x]));
+  const others = args.ledger ? [] : uclLedgerFiles().filter((f) => path.resolve(f) !== ledger && existsSync(f));
+  const existing = new Map([...others.flatMap((f) => foldLedger(readLedger(f))), ...foldLedger(entries)].map((x) => [x.id, x]));
+  const abstainRule = currentAbstain(loadRegistry(PATHS.registry), ledgerLabel(PATHS.eloBacktestLedger));
   const at = now();
   const additions = [];
   for (const m of snapshot.matches) {
@@ -112,11 +121,14 @@ run(async () => {
     }
     const match = { id, league: 'UCL', kickoff: m.kickoff, home: names[0], away: names[1] };
     const pred = predictElo(params, ratings[0].elo, ratings[1].elo);
-    additions.push(predictionEntry({ match, createdAt: at, mode: 'live', model: params.model, pred, market: null }));
+    additions.push(predictionEntry({ match, createdAt: at, mode: 'live', model: modelLabel, pred, market: null }));
     const p = pred.probs;
     const pick = ['h', 'd', 'a'].reduce((x, y) => (p[y] > p[x] ? y : x), 'h');
-    console.log(`  [候选] ${label}  Elo ${ratings[0].elo.toFixed(0)} vs ${ratings[1].elo.toFixed(0)}  → ${PICK[pick]}  胜/平/负 ${(p.h * 100).toFixed(1)}/${(p.d * 100).toFixed(1)}/${(p.a * 100).toFixed(1)}%  λ ${pred.lam.home.toFixed(2)}/${pred.lam.away.toFixed(2)}`);
+    const abstain = abstainOf([p.h, p.d, p.a].map((x) => Math.round(x * 1e4) / 1e4), abstainRule); // 与台账里四舍五入后的概率同口径
+    const call = abstain ? `不下判断（概率差 ${abstain.margin.toFixed(3)} < ${abstainRule.sample.filter.maxMargin}，${abstainRule.id}；台账照记${PICK[pick]}）` : PICK[pick];
+    console.log(`  [候选] ${label}  Elo ${ratings[0].elo.toFixed(0)}${ratings[0].basis === 'propagated' ? '*' : ''} vs ${ratings[1].elo.toFixed(0)}${ratings[1].basis === 'propagated' ? '*' : ''}  → ${call}  胜/平/负 ${(p.h * 100).toFixed(1)}/${(p.d * 100).toFixed(1)}/${(p.a * 100).toFixed(1)}%  λ ${pred.lam.home.toFixed(2)}/${pred.lam.away.toFixed(2)}`);
   }
+  if (current) console.log('  （* = 已用五大联赛新比分推算；无 * 的是 ClubElo 快照原值）');
   if (!additions.length) {
     console.log('没有新的候选预测。');
     return;

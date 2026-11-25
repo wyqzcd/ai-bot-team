@@ -11,6 +11,9 @@ export function backtestExpectedIds(matches, from = BACKTEST_FROM, to = BACKTEST
   return new Set(matches.filter((m) => m.ft && m.date >= from && m.date <= to && m.league in LEAGUES).map((m) => m.id));
 }
 
+/** 欧冠候选台账（各版本，去重，保持顺序）。 */
+export const uclLedgerFiles = (paths = PATHS) => [...new Set([...(paths.uclLedgers ?? []), ...(paths.uclLedger ? [paths.uclLedger] : [])])];
+
 /** 台账标签 = 文件名去掉 .jsonl；发布锚点与报告都按标签索引。 */
 export const ledgerLabel = (file) => path.basename(file, '.jsonl');
 
@@ -28,8 +31,8 @@ export function gateInputs({ paths = PATHS, frozen = FROZEN_LEDGERS, now, datase
     if (existsSync(file)) ledgers.push({ label: ledgerLabel(file), role: 'frozen', file, entries: readLedger(file) });
   }
   ledgers.push({ label: ledgerLabel(paths.liveLedger), role: 'live', file: paths.liveLedger, entries: readLedger(paths.liveLedger) });
-  if (paths.uclLedger && existsSync(paths.uclLedger)) {
-    ledgers.push({ label: ledgerLabel(paths.uclLedger), role: 'candidate', file: paths.uclLedger, entries: readLedger(paths.uclLedger) });
+  for (const file of uclLedgerFiles(paths)) {
+    if (existsSync(file)) ledgers.push({ label: ledgerLabel(file), role: 'candidate', file, entries: readLedger(file) });
   }
   return { ledgers, registry: loadRegistry(paths.registry), anchors: readAnchor(paths.anchors), now, dataQuality: paths.dataQuality ?? {} };
 }

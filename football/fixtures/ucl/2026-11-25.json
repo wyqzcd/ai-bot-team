@@ -1,0 +1,133 @@
+{
+  "source": "https://match.uefa.com/v5/matches?competitionId=1&fromDate=2026-11-25&toDate=2026-11-25&order=ASC&offset=0&limit=50",
+  "fetchedAt": "2026-11-25T12:26:48Z",
+  "date": "2026-11-25",
+  "matches": [
+    {
+      "uefaMatchId": "2049641",
+      "kickoff": "2026-11-25T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52498",
+        "name": "Slavia Praha"
+      },
+      "away": {
+        "id": "70691",
+        "name": "Villarreal"
+      }
+    },
+    {
+      "uefaMatchId": "2049642",
+      "kickoff": "2026-11-25T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "2609356",
+        "name": "Sabah"
+      },
+      "away": {
+        "id": "50080",
+        "name": "Barcelona"
+      }
+    },
+    {
+      "uefaMatchId": "2049634",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52747",
+        "name": "Paris"
+      },
+      "away": {
+        "id": "50137",
+        "name": "Roma"
+      }
+    },
+    {
+      "uefaMatchId": "2049635",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50138",
+        "name": "Inter"
+      },
+      "away": {
+        "id": "50107",
+        "name": "Stuttgart"
+      }
+    },
+    {
+      "uefaMatchId": "2049636",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50124",
+        "name": "Atleti"
+      },
+      "away": {
+        "id": "52319",
+        "name": "Viking"
+      }
+    },
+    {
+      "uefaMatchId": "2049637",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50149",
+        "name": "Sporting CP"
+      },
+      "away": {
+        "id": "52682",
+        "name": "Man Utd"
+      }
+    },
+    {
+      "uefaMatchId": "2049638",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50043",
+        "name": "Club Brugge"
+      },
+      "away": {
+        "id": "7889",
+        "name": "Liverpool"
+      }
+    },
+    {
+      "uefaMatchId": "2049639",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "75797",
+        "name": "Lille"
+      },
+      "away": {
+        "id": "50037",
+        "name": "Bayern München"
+      }
+    },
+    {
+      "uefaMatchId": "2049640",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52707",
+        "name": "Shakhtar"
+      },
+      "away": {
+        "id": "52692",
+        "name": "Fenerbahçe"
+      }
+    }
+  ]
+}

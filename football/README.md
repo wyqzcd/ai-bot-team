@@ -32,7 +32,7 @@
 ```
 football/
 ├── data/
-│   ├── big5.csv             样本库：五大联赛 2017-07 ~ 2026-09 赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
+│   ├── big5.csv             样本库：五大联赛 2017-07 起赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
 │   ├── elo-latest.csv       全联赛球队最新 ClubElo 快照（欧冠候选用）
 │   ├── elo-model.json       Elo 泊松模型参数（只用训练段拟合）
 │   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G8 校验）
@@ -155,6 +155,22 @@ node football/bin/result.mjs --no 周六001 --ft 2-1 --source "竞彩官方赛�
 - **Elo** `backtest-elo.jsonl`：Elo 泊松模型在五大联赛留出段的回测，R-012、R-013。精选档 R-015 与 v3 同一台账。
 
 v1 只能用修正前的样本库复现，即本仓库首次提交该模块时的 `big5.csv`。
+
+## 数据源
+
+| 来源 | 内容 | 用途 |
+|---|---|---|
+| [xgabora/Club-Football-Match-Data-2000-2025](https://github.com/xgabora/Club-Football-Match-Data-2000-2025) | 赛果、射正、赔率、赛前 ClubElo（截至 2026-09-03） | 样本库历史部分；Elo 快照 |
+| football-data.co.uk 的两个独立 GitHub 镜像：[Char2mant/futbol-veri-aynasi](https://github.com/Char2mant/futbol-veri-aynasi)、[maparan1903-bit/futbol-veri-deposu](https://github.com/maparan1903-bit/futbol-veri-deposu) | 赛果、射正、Bet365 赔率（每周两次更新，无 Elo） | 追加历史部分之后的新比赛 |
+| UEFA 官方接口 | 欧冠赛程、首发、赛果 | 欧冠候选 |
+| 竞彩官方接口（本地） | 在售场次、中文队名、胜平负赔率 | 五大联赛实盘 |
+
+第二数据源的接入规则（`src/sources.mjs`，任何一条不满足就整批拒绝）：
+1. **双源核验**：两个镜像的同一文件必须逐字节一致；
+2. **重叠核验**：与已有样本库重叠的场次（当前 1851 场），比分、射正、Bet365 赔率必须逐场一致；
+3. **只追加**：只接入已有样本库最后一天之后的比赛，历史部分一行不动，回测台账因此不受影响（复现验证会检查）。
+
+新接入的比赛没有 Elo，所以欧冠候选用的 Elo 快照仍停在 2026-08 底。
 
 ## 模型
 

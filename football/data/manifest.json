@@ -6,8 +6,34 @@
     "from": "2017-07-01",
     "to": "2026-09-03"
   },
+  "secondary": {
+    "name": "football-data.co.uk（GitHub 镜像，双源核验）",
+    "mirrors": [
+      "https://raw.githubusercontent.com/Char2mant/futbol-veri-aynasi/main/data/fd",
+      "https://raw.githubusercontent.com/maparan1903-bit/futbol-veri-deposu/main/data/fd"
+    ],
+    "files": {
+      "E0@2526": "3e3a8352f9ada6789c508d6ca184424421fed56a30400904a4a327c583407e62",
+      "SP1@2526": "4ca2e285f3ee0702f6bc55fcaa4f5a15cb3aef6220735a1d15398131e21d63f5",
+      "I1@2526": "709ae279617d16af226312bcceac941e71241745ddaf950bdac2b83afad4fcbb",
+      "D1@2526": "618301a4b39918225a8ccc57f0f839d675e1abd92fa3a3ccd9a67acd7c79dd7f",
+      "F1@2526": "898b7ddcd373cfe955ae353b1a98cf7f1c8757ca10b69d53039f4e098e88f192",
+      "E0@2627": "21d2b96792bd0bc8a324123ae68eaf60b981c5a016c538d086e8d8a5cbedd95a",
+      "SP1@2627": "40e33e66b8a2d1564050d644704296040a679e2907483181d41a3c072c00e942",
+      "I1@2627": "e9e3989f88836484bb76067f2e6a4467698952e567c2fd6f1ecb3c9fb4234fca",
+      "D1@2627": "aae45cd9821fc60b95ddad05c96fb27da024101661d232b4f103aff480ef69a0",
+      "F1@2627": "42337dff4909c58212558bf19e6efc0bd5369d883c2c96521058ca7e173b8c4b"
+    },
+    "overlapVerified": 1851,
+    "appended": 449,
+    "appendedAfter": "2026-09-03"
+  },
+  "dataset": {
+    "rows": 16658,
+    "to": "2026-11-23"
+  },
   "outputs": {
-    "big5.csv": "a5c194df12d3467680de80b828edc1c5504d9283abc87483c91d96421715e18c",
+    "big5.csv": "782c09bf90e1eb68687439f354391cedb67b043f0a6cf2f0d47e8af9cc31fb44",
     "elo-latest.csv": "3cb337021c9ac113594898a9fbb80c016854b31a1290b61168f03dcb0d315a2c"
   }
 }

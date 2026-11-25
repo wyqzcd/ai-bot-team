@@ -13,17 +13,18 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # deploy-pages 需要查询本次运行上传的产物
+  actions: read
 
 concurrency:
   group: football-pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # 打包与部署拆成两个任务（GitHub 官方模板做法）：deploy-pages 紧接着上传去查产物时，
+  # 偶发 "Found 0 artifact(s)"（产物列表尚未同步）。拆开后部署在打包任务结束后才开始，并在失败时等待后重试一次。
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,5 +50,21 @@ jobs:
         with:
           path: _site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
+    steps:
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: 首次部署失败，等待后重试
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 20
+
+      - id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

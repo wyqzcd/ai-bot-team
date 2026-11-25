@@ -84,3 +84,13 @@ test('base 上未开启例行数据通道：无资格（PR 自己改配置也没
   assert.match(reasons, /未开启 routineData\.enabled/);
   assert.match(reasons, /config\/trust\.json/);
 });
+
+test('工作目录里未提交的临时文件（CI 的 result.json 等）不算改动', () => {
+  const r = repo();
+  appendFileSync(path.join(r.dir, 'football/ledger/live.jsonl'), '{"seq":3}\n');
+  r.commit('append');
+  writeFileSync(path.join(r.dir, 'result.json'), '{}');
+  writeFileSync(path.join(r.dir, 'trust-base.json'), '{}');
+  const out = check(r.dir);
+  assert.equal(out.code, 0, out.reasons.join('; '));
+});

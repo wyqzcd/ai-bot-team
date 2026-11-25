@@ -14,7 +14,6 @@
  * 退出码：0 有资格；3 无资格（原因见输出）；1 内部错误。
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -70,23 +69,17 @@ function main() {
   const configRaw = showAtBase(base, 'config/trust.json');
   const config = configRaw ? JSON.parse(configRaw.toString('utf8')) : null;
   const mergeBase = gitText('merge-base', base, 'HEAD').trim();
-  const changed = [
-    ...gitText('diff', '--name-only', mergeBase, 'HEAD').split('\n'),
-    ...gitText('diff', '--name-only', 'HEAD').split('\n'),
-    ...gitText('ls-files', '--others', '--exclude-standard').split('\n'),
-  ].filter(Boolean).filter((f, i, a) => a.indexOf(f) === i);
+  // 只看已提交的内容（HEAD）：CI 工作目录里会有 result.json、trust-base.json 等未提交的临时文件，不能算作改动
+  const changed = gitText('diff', '--name-only', mergeBase, 'HEAD').split('\n').filter(Boolean);
 
   const baseLedgers = gitText('ls-tree', '-r', '--name-only', base, '--', 'football/ledger/').split('\n').filter((f) => f.endsWith('.jsonl'));
-  const ledgers = baseLedgers.map((file) => {
-    const abs = path.join(REPO, file);
-    return { file, base: showAtBase(base, file), head: existsSync(abs) ? readFileSync(abs) : null };
-  });
+  const ledgers = baseLedgers.map((file) => ({ file, base: showAtBase(base, file), head: showAtBase('HEAD', file) }));
   const anchorFile = 'football/ledger/published.json';
   const baseAnchor = showAtBase(base, anchorFile);
-  const headAbs = path.join(REPO, anchorFile);
+  const headAnchor = showAtBase('HEAD', anchorFile);
   const anchors = {
     base: baseAnchor ? JSON.parse(baseAnchor.toString('utf8')) : null,
-    head: existsSync(headAbs) ? JSON.parse(readFileSync(headAbs, 'utf8')) : null,
+    head: headAnchor ? JSON.parse(headAnchor.toString('utf8')) : null,
   };
   const result = { base, changed, ...evaluate({ config, changed, ledgers, anchors }) };
   if (args.includes('--json')) console.log(JSON.stringify(result, null, 2));

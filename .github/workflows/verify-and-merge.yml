@@ -149,6 +149,8 @@ jobs:
       - name: 决策并执行
         env:
           GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+          HAS_PAT: ${{ secrets.BOT_PAT != '' }}
         run: |
           PR=${{ github.event.pull_request.number }}
           DECISION=$(jq -r .decision result.json)
@@ -163,9 +165,15 @@ jobs:
 
           # 例行数据通道：只追加的数据 PR（verify 已全绿：测试 + 8 道门禁 + 复现验证）直接合并。紧急关闭：ROUTINE_AUTO_MERGE=false
           if [ "${{ vars.ROUTINE_AUTO_MERGE }}" != "false" ] && [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base "origin/${{ github.event.pull_request.base.ref }}"; then
+            # 比赛日/数据刷新工作流可能已经合并了同一个 PR，这里只处理仍开着的
+            if [ "$(gh pr view "$PR" --json state -q .state)" != "OPEN" ]; then
+              echo "PR 已不是 OPEN 状态（多半已被比赛日工作流合并），跳过。"
+              exit 0
+            fi
             echo "例行数据 PR，自动合并…"
-            gh pr merge "$PR" --squash --delete-branch
-            gh workflow run football-pages.yml --ref "${{ github.event.pull_request.base.ref }}" || true
+            GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR" --squash --delete-branch
+            # 用 BOT_PAT 合并会自动触发发布页部署；只有用默认令牌合并时才手动触发
+            if [ "$HAS_PAT" != "true" ]; then gh workflow run football-pages.yml --ref "${{ github.event.pull_request.base.ref }}" || true; fi
             exit 0
           fi
 

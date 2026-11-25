@@ -124,14 +124,15 @@ jobs:
         if: steps.changed.outputs.yes == 'true' && vars.ROUTINE_AUTO_MERGE != 'false'
         env:
           GH_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+          HAS_PAT: ${{ secrets.BOT_PAT != '' }}
         run: |
           git fetch origin main
           git show origin/main:scripts/routine-merge-check.mjs > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
           if [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base origin/main; then
             BRANCH=$(git rev-parse --abbrev-ref HEAD)
             gh pr merge "$BRANCH" --squash --delete-branch
-            # 默认令牌推到 main 不会触发其他工作流，这里显式触发发布页重新部署
-            gh workflow run football-pages.yml --ref main
+            # 用 BOT_PAT 合并时，推到 main 会自动触发发布页部署；只有用默认令牌合并（不会触发其他工作流）时才手动触发，避免重复部署
+            if [ "$HAS_PAT" != "true" ]; then gh workflow run football-pages.yml --ref main; fi
           else
             echo "不满足例行数据自动合并条件，PR 留待人工 review。"
           fi

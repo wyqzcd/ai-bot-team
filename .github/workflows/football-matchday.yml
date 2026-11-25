@@ -4,7 +4,8 @@
 # 台账无变化（当天没有欧冠、前一天也没有）就什么都不做。
 # 台账是哈希链，只能串行追加：若上一个比赛日 PR 还没合并，就接在它的分支上继续追加、更新同一个 PR（滚动 PR），
 # 不会出现两个 PR 同时追加导致冲突，也保证前一天的预测能被录上赛果。
-# 改动包含发布锚点 published.json（高风险），按 config/trust.json 必须人工 review，不会自动合并。
+# 例行数据通道：只改台账/快照/发布页、门禁测试全过、且对照 main 证明台账只追加不改写时自动 squash 合并（见 config/trust.json 的 routineData）；
+# 否则 PR 留待人工 review。紧急关闭：仓库变量 ROUTINE_AUTO_MERGE=false。
 #
 # 需要的仓库设置：Settings → Actions → General → Workflow permissions 勾选
 #   "Allow GitHub Actions to create and approve pull requests"。
@@ -26,6 +27,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 concurrency:
   group: football-matchday
@@ -36,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -107,6 +111,24 @@ jobs:
           fi
           BODY="自动比赛日闭环：录入 ${{ steps.d.outputs.yesterday }} 欧冠赛果、写入 ${{ steps.d.outputs.today }} 欧冠候选预测（开赛前已推送，推送时间即赛前证据）、8 道门禁通过后更新发布页与发布锚点。
 
-          改动包含发布锚点，需要人工 review 后合并；合并后发布页自动上线。"
+          满足例行数据条件（只追加、不改写 main 上已发布的台账）时会自动合并并重新部署发布页；否则留待人工 review。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): ${{ steps.d.outputs.today }} 比赛日闭环" --body "$BODY" --label bot-authored \
             || gh pr create --base main --head "$BRANCH" --title "chore(football): ${{ steps.d.outputs.today }} 比赛日闭环" --body "$BODY"
+
+      # 例行数据通道（只追加的数据 PR 自动合并；代码/工作流/规则改动永远走人工 review）。
+      # 检查脚本必须取 main 上的版本运行，PR 改不了它。紧急关闭：仓库变量 ROUTINE_AUTO_MERGE=false。
+      - name: 例行数据自动合并
+        if: steps.changed.outputs.yes == 'true' && vars.ROUTINE_AUTO_MERGE != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+        run: |
+          git fetch origin main
+          git show origin/main:scripts/routine-merge-check.mjs > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
+          if [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base origin/main; then
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            gh pr merge "$BRANCH" --squash --delete-branch
+            # 默认令牌推到 main 不会触发其他工作流，这里显式触发发布页重新部署
+            gh workflow run football-pages.yml --ref main
+          else
+            echo "不满足例行数据自动合并条件，PR 留待人工 review。"
+          fi

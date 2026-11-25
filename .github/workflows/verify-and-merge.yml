@@ -1,6 +1,7 @@
 # 校验 + 混合信任评分 + 渐进自动合并
-# 依赖 Secrets：ANTHROPIC_API_KEY（可选，QA Agent 用）
-# 依赖 Variables：QA_AGENT_ENABLED（"true" 才在 CI 跑 pstack QA Agent）、AUTO_MERGE（"true" 才允许真实合并）
+# 验证：机械复现验证（零依赖，始终运行）决定"验证报告通过"；可选的 Claude QA Agent 只作参考
+# 可选 Secrets：ANTHROPIC_API_KEY（官方 Claude，仅可选 QA Agent 用）
+# 依赖 Variables：QA_AGENT_ENABLED（"true" 才跑可选的 Claude QA Agent）、AUTO_MERGE（"true" 才允许真实合并）
 name: 校验与渐进自动合并
 
 on:
@@ -11,6 +12,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 
 jobs:
   verify:
@@ -43,28 +45,38 @@ jobs:
         continue-on-error: true
         run: node football/bin/gates.mjs
 
-      # 可选：pstack QA Agent 做真实行为验证，把报告写进 config/verification/
-      # 国内用户：配 Secrets.ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（DeepSeek 等 Anthropic 兼容端点）
-      # 注意：secrets 不能出现在 if 条件里，凭据缺失在 shell 里判断
-      - name: QA Agent 验证（pstack，可选）
+      # 复现验证（替代原先依赖外部大模型的 QA Agent，零依赖、不花钱）：
+      # 用 PR 里的代码与样本库重新生成回测台账与 Elo 模型参数，必须与提交的文件逐字节一致，
+      # 再复算全部 active 规则。手改台账、改了模型却没重新生成台账、登记数字对不上，都会在这里失败。
+      # 通过即视为"验证报告通过"（信任评分 +10），报告写入 config/verification/pr-<号>.json（不入库）。
+      - name: 复现验证（回测台账逐字节重算 + 规则复算）
         id: qa
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          node football/bin/backtest.mjs
+          node football/bin/elo-backtest.mjs
+          node football/bin/stats.mjs --all > /dev/null
+          git diff --exit-code --stat -- football/ledger football/data
+          mkdir -p config/verification
+          node -e "require('fs').writeFileSync('config/verification/pr-${{ github.event.pull_request.number }}.json', JSON.stringify({ pr: ${{ github.event.pull_request.number }}, sha: '${{ github.event.pull_request.head.sha }}', checkedAt: new Date().toISOString(), checks: ['backtest-v3 逐字节重算一致', 'backtest-elo 与 elo-model.json 逐字节重算一致', 'active 规则全部复算一致'], result: 'pass' }, null, 2))"
+
+      # 可选：官方 Claude 做额外的行为验证（只作参考，不影响评分）。需要 Secrets.ANTHROPIC_API_KEY 且 Variables.QA_AGENT_ENABLED == "true"。
+      - name: Claude QA Agent（可选，仅官方 API）
+        id: qa_llm
         if: ${{ vars.QA_AGENT_ENABLED == 'true' }}
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$ANTHROPIC_AUTH_TOKEN" ]; then
-            echo "未配置模型凭据，跳过 QA Agent（评分将按未验证处理）。"
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "未配置 ANTHROPIC_API_KEY，跳过可选的 Claude QA Agent（复现验证照常生效）。"
             exit 0
           fi
-          if [ -n "$AGENT_MODEL" ]; then export ANTHROPIC_MODEL="$AGENT_MODEL"; fi
           npm install -g @anthropic-ai/claude-code
           claude plugin marketplace add cursor/plugins || true
           claude plugin install pstack@cursor-plugins || true
-          claude -p "你是 QA 验证 Agent。按 prove-it-works 纪律验证当前 PR 的改动：跑项目真实检查命令、逐条核对验收标准、构造反例实际运行复现。把验证报告写成 config/verification/pr-${{ github.event.pull_request.number }}.json（结构参考 .claude/agents/qa.md）。只报告实际复现的问题。" \
+          claude -p "你是 QA 验证 Agent。按 prove-it-works 纪律验证当前 PR 的改动：跑项目真实检查命令、逐条核对验收标准、构造反例实际运行复现。把验证报告写成 config/verification/pr-${{ github.event.pull_request.number }}-claude.json（结构参考 .claude/agents/qa.md）。只报告实际复现的问题。" \
             --dangerously-skip-permissions \
             --allowedTools "Bash" "Read" "Grep" "Glob" "Write"
 
@@ -74,7 +86,12 @@ jobs:
           BASE="${{ github.event.pull_request.base.ref }}"
           git fetch origin "$BASE" --depth=1
           git show "origin/$BASE:config/trust.json" > trust-base.json
-          echo "已从 $BASE 读取放权配置"
+          # 评分脚本与任务类型路由同样只用 base 版本：PR 改 trust-score.mjs / routing.json 不能给自己刷分。
+          # 保持 scripts/ 与 config/ 的相对位置（脚本按 ../config/routing.json 读路由）。
+          mkdir -p "$RUNNER_TEMP/trust/scripts" "$RUNNER_TEMP/trust/config"
+          git show "origin/$BASE:scripts/trust-score.mjs" > "$RUNNER_TEMP/trust/scripts/trust-score.mjs"
+          git show "origin/$BASE:config/routing.json" > "$RUNNER_TEMP/trust/config/routing.json"
+          echo "已从 $BASE 读取放权配置与评分脚本"
 
       - name: 计算信任评分并评论
         env:
@@ -82,12 +99,12 @@ jobs:
         run: |
           VERIFIED=${{ steps.qa.outcome == 'success' && 'true' || 'false' }}
           CI=${{ (steps.tests.outcome == 'success' && steps.football_tests.outcome == 'success' && steps.football_gates.outcome == 'success') && 'success' || 'failure' }}
-          node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust/scripts/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" \
             --format markdown > score-comment.md
-          node scripts/trust-score.mjs score-pr ${{ github.event.pull_request.number }} \
+          node "$RUNNER_TEMP/trust/scripts/trust-score.mjs" score-pr ${{ github.event.pull_request.number }} \
             --config trust-base.json \
             --ci "$CI" \
             --verified "$VERIFIED" > result.json
@@ -100,11 +117,11 @@ jobs:
           path: result.json
 
       # 测试与门禁前面用 continue-on-error 是为了评分照常计算、评论照常发出；
-      # 这里收口：任一失败，verify 检查本身必须变红，不能出现"测试挂了但 CI 显示绿色"。
+      # 这里收口：测试、门禁、复现验证任一失败，verify 检查本身必须变红，不能出现"测试挂了但 CI 显示绿色"。
       - name: 测试或门禁失败则标红
-        if: ${{ steps.tests.outcome != 'success' || steps.football_tests.outcome != 'success' || steps.football_gates.outcome != 'success' }}
+        if: ${{ steps.tests.outcome != 'success' || steps.football_tests.outcome != 'success' || steps.football_gates.outcome != 'success' || steps.qa.outcome != 'success' }}
         run: |
-          echo "demo 测试：${{ steps.tests.outcome }}；足球测试：${{ steps.football_tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}"
+          echo "demo 测试：${{ steps.tests.outcome }}；足球测试：${{ steps.football_tests.outcome }}；足球门禁：${{ steps.football_gates.outcome }}；复现验证：${{ steps.qa.outcome }}"
           exit 1
 
   merge:
@@ -113,6 +130,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -122,8 +141,10 @@ jobs:
       - name: 取 base 分支放权配置
         run: |
           BASE="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "$BASE" --depth=1
+          git fetch origin "$BASE"
           git show "origin/$BASE:config/trust.json" > trust-base.json
+          # base 上还没有检查脚本时（首次引入前）不走例行数据通道
+          git show "origin/$BASE:scripts/routine-merge-check.mjs" > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
 
       - name: 决策并执行
         env:
@@ -137,6 +158,14 @@ jobs:
 
           if [ "$BOT_AUTHORED" != "true" ]; then
             echo "非 bot PR，跳过自动合并（只允许带 bot-authored 标签的 PR 走自动通道）。"
+            exit 0
+          fi
+
+          # 例行数据通道：只追加的数据 PR（verify 已全绿：测试 + 8 道门禁 + 复现验证）直接合并。紧急关闭：ROUTINE_AUTO_MERGE=false
+          if [ "${{ vars.ROUTINE_AUTO_MERGE }}" != "false" ] && [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base "origin/${{ github.event.pull_request.base.ref }}"; then
+            echo "例行数据 PR，自动合并…"
+            gh pr merge "$PR" --squash --delete-branch
+            gh workflow run football-pages.yml --ref "${{ github.event.pull_request.base.ref }}" || true
             exit 0
           fi
 

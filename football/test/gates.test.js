@@ -18,10 +18,13 @@ function sandbox() {
 }
 
 // ---------- G8 数据质量 ----------
+const LAST = JSON.parse(readFileSync(path.join(DATA, 'manifest.json'), 'utf8')).dataset?.to;
+const daysAfterLast = (n) => new Date(Date.parse(`${LAST}T00:00:00Z`) + n * 86400000).toISOString();
+
 test('G8：仓库样本库通过数据质量检查，且与指纹清单一致', () => {
-  const r = checkDataQuality({ now: '2026-11-24T00:00:00Z' });
+  const r = checkDataQuality({ now: daysAfterLast(1) });
   assert.deepEqual(r.errors, []);
-  assert.equal(r.lastDate, '2026-09-03');
+  assert.equal(r.lastDate, LAST);
 });
 
 test('G8：能机械发现当初靠运气才发现的队名分裂', () => {
@@ -31,7 +34,7 @@ test('G8：能机械发现当初靠运气才发现的队名分裂', () => {
   const csv = readFileSync(path.join(dir, 'big5.csv'), 'utf8').replace(",Nott'm Forest,Leeds,", ',Nottm Forest,Leeds,');
   assert.ok(csv.includes(',Nottm Forest,Leeds,'), '构造的篡改确实生效');
   writeFileSync(path.join(dir, 'big5.csv'), csv);
-  const r = checkDataQuality({ dataDir: dir, manifestFile, now: '2026-11-24T00:00:00Z' });
+  const r = checkDataQuality({ dataDir: dir, manifestFile, now: daysAfterLast(1) });
   assert.ok(r.errors.some((e) => e.includes('队名分裂') && e.includes('Nottm Forest')), r.errors.join('\n'));
   assert.ok(r.errors.some((e) => e.includes('指纹不符')), '手改样本库同时会被指纹发现');
 });
@@ -44,11 +47,11 @@ test('G8：行级校验抓出重复、非法比分、半场多于全场、非法
 });
 
 test('G8：样本库超过 30 天提示，超过 120 天阻断', () => {
-  assert.equal(checkDataQuality({ now: '2026-09-20T00:00:00Z' }).warnings.length, 0);
-  const stale = checkDataQuality({ now: '2026-11-24T00:00:00Z' });
+  assert.equal(checkDataQuality({ now: daysAfterLast(10) }).warnings.length, 0);
+  const stale = checkDataQuality({ now: daysAfterLast(82) });
   assert.equal(stale.errors.length, 0);
   assert.match(stale.warnings.join(), /距今 82 天/);
-  assert.match(checkDataQuality({ now: '2027-01-15T00:00:00Z' }).errors.join(), /超过 120 天上限/);
+  assert.match(checkDataQuality({ now: daysAfterLast(130) }).errors.join(), /超过 120 天上限/);
 });
 
 // ---------- G6 候选到期裁决 ----------

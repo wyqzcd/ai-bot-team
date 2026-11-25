@@ -1,5 +1,6 @@
-# 样本库每周刷新：每周一 03:17 UTC 下载原始数据，用 build-dataset 重建 big5.csv / elo-latest.csv / manifest.json。
-# 有变化才开 PR 交人工审（样本库属于低风险目录，但同批会更新发布锚点等高风险文件时仍需人工 review）。
+# 样本库每周刷新：每周一 03:17 UTC 下载原始数据（xgabora 汇编 + football-data.co.uk 两个独立镜像），用 build-dataset 重建 big5.csv / elo-latest.csv / manifest.json。
+# 镜像必须逐字节一致、与历史重叠场次必须逐场一致，否则构建失败、不开 PR。
+# 有变化才开 PR；门禁、测试、复现验证全过且只改样本库文件时，走例行数据通道自动合并，否则留待人工 review。
 # 不刷新的后果：样本库超过 120 天 G8 阻断、欧冠候选因 Elo 过旧停出预测——闭环会自己停下来。
 # 回测窗口上界固定（BACKTEST_TO），刷新样本库不会让现有回测台账"缺场"；要把新比赛纳入回测，需另行生成新版本台账。
 name: 足球样本库刷新
@@ -12,12 +13,15 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -28,17 +32,32 @@ jobs:
           RAW_URL="https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data-2000-2025/main/data/Matches.csv"
           mkdir -p "$RUNNER_TEMP/raw"
           curl -sSfL -o "$RUNNER_TEMP/raw/Matches.csv" "$RAW_URL"
-          node football/bin/build-dataset.mjs --raw "$RUNNER_TEMP/raw/Matches.csv" --source-url "$RAW_URL"
+          # 第二数据源：football-data.co.uk 的两个独立 GitHub 镜像（双源核验，必须逐字节一致），取上赛季 + 本赛季
+          Y=$((10#$(date -u +%y))); M=$((10#$(date -u +%m)))
+          if [ "$M" -ge 7 ]; then CUR=$(printf "%02d%02d" $Y $((Y+1))); PREV=$(printf "%02d%02d" $((Y-1)) $Y); else CUR=$(printf "%02d%02d" $((Y-1)) $Y); PREV=$(printf "%02d%02d" $((Y-2)) $((Y-1))); fi
+          A=https://raw.githubusercontent.com/Char2mant/futbol-veri-aynasi/main/data/fd
+          B=https://raw.githubusercontent.com/maparan1903-bit/futbol-veri-deposu/main/data/fd
+          for S in $PREV $CUR; do for LG in E0 SP1 I1 D1 F1; do
+            mkdir -p "$RUNNER_TEMP/fd-a/$S" "$RUNNER_TEMP/fd-b/$S"
+            curl -sSfL -o "$RUNNER_TEMP/fd-a/$S/$LG.csv" "$A/$S/$LG.csv"
+            curl -sSfL -o "$RUNNER_TEMP/fd-b/$S/$LG.csv" "$B/$S/$LG.csv"
+          done; done
+          node football/bin/build-dataset.mjs --raw "$RUNNER_TEMP/raw/Matches.csv" --source-url "$RAW_URL" \
+            --fd-a "$RUNNER_TEMP/fd-a" --fd-b "$RUNNER_TEMP/fd-b" --fd-seasons "$PREV,$CUR"
 
       - name: 有变化吗
         id: changed
         run: |
           if [ -n "$(git status --porcelain football/data)" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; else echo "样本库无变化，结束。"; echo "yes=false" >> "$GITHUB_OUTPUT"; fi
 
-      - name: 门禁与测试
+      - name: 门禁、测试、复现验证
         if: steps.changed.outputs.yes == 'true'
         run: |
           node football/bin/gates.mjs
+          # 复现验证：新样本库下回测台账必须逐字节不变（上游若改写了历史比赛，这里会失败，转人工）
+          node football/bin/backtest.mjs
+          node football/bin/elo-backtest.mjs
+          git diff --exit-code --stat -- football/ledger football/data/elo-model.json
           (cd demo && npm test)
           (cd football && npm test)
 
@@ -57,3 +76,21 @@ jobs:
           BODY="每周样本库刷新：原始文件 sha256 $(jq -r '.source.sha256' football/data/manifest.json)，截至 $(jq -r '.source.to' football/data/manifest.json)。G8 数据质量与测试已通过。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY" --label bot-authored \
             || gh pr create --base main --head "$BRANCH" --title "chore(football): 刷新样本库" --body "$BODY"
+
+      # 例行数据通道（只追加的数据 PR 自动合并；代码/工作流/规则改动永远走人工 review）。
+      # 检查脚本必须取 main 上的版本运行，PR 改不了它。紧急关闭：仓库变量 ROUTINE_AUTO_MERGE=false。
+      - name: 例行数据自动合并
+        if: steps.changed.outputs.yes == 'true' && vars.ROUTINE_AUTO_MERGE != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT || github.token }}
+        run: |
+          git fetch origin main
+          git show origin/main:scripts/routine-merge-check.mjs > "$RUNNER_TEMP/routine-merge-check.mjs" 2>/dev/null || rm -f "$RUNNER_TEMP/routine-merge-check.mjs"
+          if [ -s "$RUNNER_TEMP/routine-merge-check.mjs" ] && node "$RUNNER_TEMP/routine-merge-check.mjs" --base origin/main; then
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            gh pr merge "$BRANCH" --squash --delete-branch
+            # 默认令牌推到 main 不会触发其他工作流，这里显式触发发布页重新部署
+            gh workflow run football-pages.yml --ref main
+          else
+            echo "不满足例行数据自动合并条件，PR 留待人工 review。"
+          fi

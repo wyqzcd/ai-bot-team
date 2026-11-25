@@ -32,7 +32,7 @@
 ```
 football/
 ├── data/
-│   ├── big5.csv             样本库：五大联赛 2017-07 ~ 2026-09 赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
+│   ├── big5.csv             样本库：五大联赛 2017-07 起赛果 + 射正 + 赛前赔率 + 赛前 Elo（赔率只做基线，不进模型）
 │   ├── elo-latest.csv       全联赛球队最新 ClubElo 快照（欧冠候选用）
 │   ├── elo-model.json       Elo 泊松模型参数（只用训练段拟合）
 │   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G8 校验）
@@ -156,6 +156,22 @@ node football/bin/result.mjs --no 周六001 --ft 2-1 --source "竞彩官方赛�
 
 v1 只能用修正前的样本库复现，即本仓库首次提交该模块时的 `big5.csv`。
 
+## 数据源
+
+| 来源 | 内容 | 用途 |
+|---|---|---|
+| [xgabora/Club-Football-Match-Data-2000-2025](https://github.com/xgabora/Club-Football-Match-Data-2000-2025) | 赛果、射正、赔率、赛前 ClubElo（截至 2026-09-03） | 样本库历史部分；Elo 快照 |
+| football-data.co.uk 的两个独立 GitHub 镜像：[Char2mant/futbol-veri-aynasi](https://github.com/Char2mant/futbol-veri-aynasi)、[maparan1903-bit/futbol-veri-deposu](https://github.com/maparan1903-bit/futbol-veri-deposu) | 赛果、射正、Bet365 赔率（每周两次更新，无 Elo） | 追加历史部分之后的新比赛 |
+| UEFA 官方接口 | 欧冠赛程、首发、赛果 | 欧冠候选 |
+| 竞彩官方接口（本地） | 在售场次、中文队名、胜平负赔率 | 五大联赛实盘 |
+
+第二数据源的接入规则（`src/sources.mjs`，任何一条不满足就整批拒绝）：
+1. **双源核验**：两个镜像的同一文件必须逐字节一致；
+2. **重叠核验**：与已有样本库重叠的场次（当前 1851 场），比分、射正、Bet365 赔率必须逐场一致；
+3. **只追加**：只接入已有样本库最后一天之后的比赛，历史部分一行不动，回测台账因此不受影响（复现验证会检查）。
+
+新接入的比赛没有 Elo，所以欧冠候选用的 Elo 快照仍停在 2026-08 底。
+
 ## 模型
 
 Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
@@ -221,6 +237,8 @@ Dixon-Coles 族泊松模型，用赛果和射正（不用赔率）：
 
 CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的真实时间**跑一遍 `node football/bin/gates.mjs`，所以"开赛超 72 小时没录赛果""候选规则到期没裁决""样本库过旧"都会让 CI 变红。测试或门禁任一失败，`verify` 检查本身都会变红（信任评分照常计算）。
 
+CI 的验证还包括**复现验证**：用 PR 的代码和样本库重新生成 `backtest-v3.jsonl`、`backtest-elo.jsonl` 与 `elo-model.json`，必须与提交的文件逐字节一致，并复算全部 active 规则。改了模型却没重新生成台账、或手改了台账，都会在这里失败。这一步不依赖任何大模型。
+
 | 门禁 | 检查内容 |
 |---|---|
 | G1 结构完整性 | 字段齐全、类型正确、字段序规范、seq 连续 |
@@ -237,8 +255,8 @@ CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的�
 | 工作流 | 何时运行 | 做什么 |
 |---|---|---|
 | `football-pages.yml` | 推到 main 且改了 `football/**` | 8 道门禁通过才把 `football/reports/` 部署到 GitHub Pages（首页 = 最新发布页）；门禁不过不上线 |
-| `football-matchday.yml` | 每天 12:07 UTC（北京时间 20:07） | 录前一天欧冠赛果 → 抓当天欧冠赛程并出候选预测 → 门禁、测试、发布 → 开 PR 交人工审；台账没变化就什么都不做；上一个比赛日 PR 未合并时接在它上面继续（滚动 PR），避免哈希链冲突 |
-| `football-data-refresh.yml` | 每周一 03:17 UTC | 下载原始数据重建样本库与指纹清单，有变化就开 PR；不刷新的话 G8 会在样本库超 120 天时阻断，欧冠候选也会因 Elo 过旧停出 |
+| `football-matchday.yml` | 每天 12:07 UTC（北京时间 20:07） | 录前一天欧冠赛果 → 抓当天欧冠赛程并出候选预测 → 门禁、测试、发布 → 开 PR；满足例行数据条件就自动合并并重新部署发布页，否则留待人工审；台账没变化就什么都不做；上一个比赛日 PR 未合并时接在它上面继续（滚动 PR），避免哈希链冲突 |
+| `football-data-refresh.yml` | 每周一 03:17 UTC | 下载原始数据重建样本库与指纹清单，门禁、测试、复现验证全过就走例行数据通道自动合并；不刷新的话 G8 会在样本库超 120 天时阻断，欧冠候选也会因 Elo 过旧停出 |
 | `verify-and-merge.yml` | 每个 PR | 单测 + 用真实时间跑 8 道门禁，任一失败 `verify` 变红 |
 
 需要在仓库设置里打开的开关：
@@ -247,6 +265,17 @@ CI（`.github/workflows/verify-and-merge.yml`）每个 PR 都用**运行时的�
 3. 可选：Secret `BOT_PAT`。用默认令牌开的 PR 不会触发其他工作流（GitHub 的限制），配了它，比赛日 PR 才会自动跑 `verify-and-merge`。
 
 定时工作流只在默认分支上运行，本模块合并到 main 后才开始转。竞彩不在 CI 里跑（官方接口海外不可达），仍需本地执行 `jczq-board --live` + `jczq.mjs`。
+
+### 例行数据通道（自动合并）
+
+比赛日和样本库刷新这类 PR 不需要人看：只要同时满足以下条件，就自动 squash 合并，并重新部署发布页。
+
+1. 带 `bot-authored` 标签；
+2. 改动只落在 `config/trust.json` 的 `routineData.paths` 白名单内（台账、赛程快照、发布页、样本库三个文件），代码、工作流、规则登记表、对照表一律不在内；
+3. CI 全绿：两套测试 + 8 道门禁 + 复现验证；
+4. `scripts/routine-merge-check.mjs` 对照 **main** 证明：每本台账都以 main 上的版本为前缀（只追加、不改写、不删除），发布锚点条数不减少，登记表锚点不变。
+
+放权配置和检查脚本都只用 **main 上的版本**，PR 改不了自己的放权规则；信任评分脚本同理。紧急关闭：仓库变量 `ROUTINE_AUTO_MERGE` 设为 `false`。
 
 ## 局限
 

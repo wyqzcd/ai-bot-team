@@ -439,6 +439,25 @@
       },
       "baseline": "覆盖率 8.33%（300/3600）。同一批场次第二选择命中 36.00%（108/300），z=0.53。去掉这批后其余 3300 场方向命中 53.39%（全样本 52.17%）。同样本赔率热门 45.67%（137/300），市场明显更有把握。欧冠没有回测样本，用于欧冠只是沿用。",
       "registeredAt": "2026-11-25"
+    },
+    {
+      "id": "R-020",
+      "title": "欧联方向（Elo 泊松模型 + 推算 Elo，候选）",
+      "status": "candidate",
+      "definition": "欧联联赛阶段比赛：UEFA 官方赛程（football/fixtures/uel/，competitionId=14）+ 推算 Elo（data/elo-current.csv，口径同 R-017）+ R-012 的模型参数，开赛前写入 ledger/uel-candidate.jsonl，开赛即锁定。球队按 UEFA 编号查 data/uefa-teams.json（与欧冠共用），查不到或任一方评分超过 120 天不出预测。概率差 < 0.04 的场次按 R-019 不下判断。",
+      "sample": {
+        "ledger": "ledger/uel-candidate.jsonl",
+        "filter": {
+          "mode": "live"
+        }
+      },
+      "recompute": "node football/bin/stats.mjs --ledger football/ledger/uel-candidate.jsonl --filter '{\"mode\":\"live\"}'",
+      "claim": null,
+      "note": "欧联球队大多来自五大联赛之外，评分表覆盖不全（首个比赛日 18 场只有 5 场两队都有可用评分）；五大联赛之外的球队评分停在 2026-09 初的快照，没有推算。参考：Elo 模型在五大联赛留出段 conf 0.50~0.54 区间方向命中 49.32%（n=438，同样本赔率热门 50.46%）。没有任何欧联回测样本，只作候选记录，不作结论。",
+      "registeredAt": "2026-11-26",
+      "reviewAt": {
+        "n": 100
+      }
     }
   ]
 }

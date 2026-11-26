@@ -1,6 +1,6 @@
 {
-  "publishedAt": "2026-11-25T14:32:26Z",
-  "report": "../reports/2026-11-25.html",
+  "publishedAt": "2026-11-26T13:23:10Z",
+  "report": "../reports/2026-11-26.html",
   "backtest-v3": {
     "entries": 25114,
     "lastHash": "15c685f1b7b27381"
@@ -106,6 +106,10 @@
     "R-019": {
       "status": "active",
       "fingerprint": "57c1149b7ffa9a15"
+    },
+    "R-020": {
+      "status": "candidate",
+      "fingerprint": "eece5a02e33a0d7c"
     }
   }
 }

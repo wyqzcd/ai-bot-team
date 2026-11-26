@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 欧冠候选：赛后从 UEFA 官方接口录比分，并复算命中。
+ * 欧战候选（欧冠 / 欧联，--competition ucl|uel，默认 ucl）：赛后从 UEFA 官方接口录比分，并复算命中。
  * - 只录 status=FINISHED 且有常规时间比分（score.regular）的场次；联赛阶段没有加时，常规时间比分即胜平负口径。
  * - 只给候选台账里已有预测的场次录赛果（各版本台账都找：v1 快照口径、v2 推算口径），赛果写进预测所在的那本；
  *   录入走与实盘相同的预检（开赛 105 分钟后、不得重复）。
@@ -13,20 +13,22 @@ import path from 'node:path';
 import { appendEntries, foldLedger, readLedger } from '../src/ledger.mjs';
 import { LiveError, planResult } from '../src/live.mjs';
 import { computeStats, review } from '../src/metrics.mjs';
-import { ledgerLabel, uclLedgerFiles } from '../src/pipeline.mjs';
+import { ledgerLabel } from '../src/pipeline.mjs';
 import { existsSync } from 'node:fs';
-import { UCL_SNAPSHOT_DIR, UEFA_MATCHES_URL, eloNames, loadUefaTeamMap, uclMatchId } from '../src/ucl.mjs';
+import { UEFA_MATCHES_URL, competitionOf, eloNames, loadUefaTeamMap, uclMatchId } from '../src/ucl.mjs';
 import { CliError, now, parseArgs, run } from '../src/cli.mjs';
 
 const PICK = { h: '主胜', d: '平', a: '客胜' };
 export const UCL_TIER_MIN_CONF = 0.54; // 与 R-013 相同的高置信档阈值
 
 run(async () => {
-  const args = parseArgs(process.argv.slice(2), { flags: ['dry-run'], options: ['date'] });
+  const args = parseArgs(process.argv.slice(2), { flags: ['dry-run'], options: ['date', 'competition'] });
+  const comp = competitionOf(args.competition ?? 'ucl');
+  const url = UEFA_MATCHES_URL(args.date, comp.uefaId);
   if (!args.date || !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new CliError('需要 --date YYYY-MM-DD');
   let response;
   try {
-    response = await fetch(UEFA_MATCHES_URL(args.date), { signal: AbortSignal.timeout(20000) });
+    response = await fetch(url, { signal: AbortSignal.timeout(20000) });
   } catch (error) {
     throw new CliError(`UEFA 抓取失败：${error.message}`, 6);
   }
@@ -43,16 +45,16 @@ run(async () => {
     away: { id: m.awayTeam.id, name: m.awayTeam.internationalName },
   }));
   if (!matches.length) {
-    console.log(`${args.date} 没有欧冠比赛。`);
+    console.log(`${args.date} 没有${comp.name}比赛。`);
     return;
   }
 
   const teamMap = loadUefaTeamMap();
-  const books = uclLedgerFiles().filter((f) => existsSync(f)).map((file) => ({ file, entries: readLedger(file), added: [] }));
+  const books = comp.ledgers.filter((f) => existsSync(f)).map((file) => ({ file, entries: readLedger(file), added: [] }));
   for (const m of matches) {
     const names = eloNames(m, teamMap);
     if (names.includes(null)) continue;
-    const id = uclMatchId(m, names);
+    const id = uclMatchId(m, names, comp.prefix);
     const book = books.find((b) => foldLedger(b.entries).some((x) => x.id === id && x.prediction && !x.result));
     if (!book) continue;
     if (m.status !== 'FINISHED' || !m.score) {
@@ -72,8 +74,8 @@ run(async () => {
   if (total && !args['dry-run']) {
     for (const b of books) if (b.added.length) appendEntries(b.file, b.added.map(({ seq, prev, hash, ...rest }) => rest));
     // 赛果快照只在确实录入了赛果时写，作为录入依据；重跑不会产生无意义的改动。
-    mkdirSync(UCL_SNAPSHOT_DIR, { recursive: true });
-    writeFileSync(path.join(UCL_SNAPSHOT_DIR, `${args.date}.results.json`), `${JSON.stringify({ source: UEFA_MATCHES_URL(args.date), fetchedAt: at, matches }, null, 2)}\n`);
+    mkdirSync(comp.snapshotDir, { recursive: true });
+    writeFileSync(path.join(comp.snapshotDir, `${args.date}.results.json`), `${JSON.stringify({ source: url, fetchedAt: at, matches }, null, 2)}\n`);
   }
 
   console.log(`本次录入 ${total} 场${args['dry-run'] ? '（dry-run，未写入）' : ''}`);
@@ -94,5 +96,5 @@ run(async () => {
     console.log(`  方向命中：${all.direction_hit.hits}/${all.n}；高置信档（conf ≥ ${UCL_TIER_MIN_CONF}）${tier.direction_hit.hits}/${tier.n}；比分 TOP3 ${all.score_top3_hit.hits}/${all.n}`);
     console.log(`  未中归因：${JSON.stringify(rev.buckets)}`);
   }
-  console.log('样本极小，只作记录，不作结论（欧冠规则仍为候选）。');
+  console.log('样本极小，只作记录，不作结论（欧战规则均为候选）。');
 });

@@ -40,8 +40,8 @@ football/
 │   ├── manifest.json        原始文件与样本库文件的 sha256 指纹（G8 校验）
 │   ├── jczq-teams.json      竞彩中文队名 → 样本库队名对照表
 │   ├── jczq-ucl-teams.json  竞彩欧冠中文队名 → Elo 队名（五大联赛之外的球队）
-│   └── uefa-teams.json      UEFA 球队编号 → Elo 快照队名对照表
-├── fixtures/ucl/            UEFA 官方赛程/赛果精简快照（赛前证据，不覆盖）
+│   └── uefa-teams.json      UEFA 球队编号 → Elo 队名对照表（欧冠、欧联共用）
+├── fixtures/ucl/ fixtures/uel/  UEFA 官方欧冠 / 欧联赛程、赛果精简快照（赛前证据，不覆盖）
 ├── ledger/
 │   ├── backtest-v3.jsonl    当前回测台账（确定性生成，可逐字节复现）
 │   ├── backtest-v2.jsonl    v2 回测台账，已冻结
@@ -50,6 +50,7 @@ football/
 │   ├── live.jsonl           实盘台账（竞彩 / 手工 fixtures，首次预测时创建，只追加）
 │   ├── ucl-candidate.jsonl  欧冠候选台账 v1：ClubElo 快照口径（R-014，已被取代，只补录赛果）
 │   ├── ucl-candidate-v2.jsonl 欧冠候选台账 v2：推算 Elo 口径（R-017，首次预测时创建）
+│   ├── uel-candidate.jsonl 欧联候选台账：推算 Elo 口径（R-020，首次预测时创建）
 │   ├── ucl-market.json      欧冠竞彩赔率快照（只作对照，不进哈希链，开赛后的快照一律不认）
 │   ├── ucl-notes.json       欧冠首发标注（缺阵常规主力，不进模型）
 │   ├── jczq-refs.json       竞彩编号/中文队名旁注（只用于展示，不进哈希链）
@@ -105,6 +106,9 @@ NODE_USE_ENV_PROXY=1 node football/bin/ucl.mjs --fetch --date 2026-11-24   # 抓
 node football/bin/ucl.mjs --date 2026-11-24                                # 出候选预测（开赛即锁定）
 NODE_USE_ENV_PROXY=1 node football/bin/ucl-lineups.mjs --date 2026-11-24   # 首发标注
 NODE_USE_ENV_PROXY=1 node football/bin/ucl-results.mjs --date 2026-11-24   # 赛后录比分、算命中
+# 欧联：同样两条命令加 --competition uel（赛程快照 fixtures/uel/，台账 ledger/uel-candidate.jsonl）
+NODE_USE_ENV_PROXY=1 node football/bin/ucl.mjs --competition uel --fetch --date 2026-11-26
+node football/bin/ucl.mjs --competition uel --date 2026-11-26
 node football/bin/ucl-market.mjs --date 2026-12-09 [--check]               # 竞彩欧冠赔率对照（开赛前，本地抓取后）
 
 # Elo 推算与不下判断阈值（选参只看训练段，确定性，CI 复现验证会重跑）
@@ -157,7 +161,8 @@ node football/bin/result.mjs --no 周六001 --ft 2-1 --source "竞彩官方赛�
 - **Elo 推算**（`bin/elo-update.mjs`）：ClubElo 快照停在原始样本库最后一天（2026-09 初），之后用五大联赛新比分按标准 Elo 公式往后推（K=15、计净胜球）。参数只在训练窗口（2017-18 ~ 2023-24 赛季，每季 4 个截断日、各 90 天）选出。留出窗口（2024-25、2025-26 赛季，n=4273）上对数损失 0.9961 → 0.9929（配对 z=2.95），补回冻结快照与真实 ClubElo（0.9925）差距的约九成；方向命中没变。只推五大联赛球队，欧战杯赛不进推算，其他联赛球队保持快照原值，超过 120 天照样停出。
 - **不下判断**（R-019）：第一、第二选择概率差 < 0.04 的场次不给方向（台账照记，只是不算"判断"）。阈值只在训练段选出，见下方"实验记录"。
 - **赔率对照**（`bin/ucl-market.mjs`）：竞彩也开售欧冠。本地跑 `node scripts/jczq-board.mjs --live` 抓到当天赔率后，跑 `ucl-market.mjs --date <日期>` 把欧冠场次的胜平负赔率去水记到 `ledger/ucl-market.json`，发布页逐场显示模型与市场的差，任一方向差 ≥ 10 个百分点标"分歧大"、方向不同另标。赔率只作对照，不进模型；必须在开赛前记录，开赛后抓的一律拒绝，读取时也只认开赛前的快照。五大联赛球队沿用 `jczq-teams.json`，其余球队的中文名在 `jczq-ucl-teams.json`（**还没用竞彩实盘核对**，先跑 `--check`）。
-- 每天的比赛日工作流会自动录前一天赛果、出当天候选预测（见"上线与定时运转"）。
+- 每天的比赛日工作流会自动录前一天赛果、出当天候选预测（欧冠、欧联都跑，见"上线与定时运转"）。
+- **欧联**（R-020，候选）：流程与口径同欧冠，`--competition uel`，UEFA competitionId=14，台账 `ledger/uel-candidate.jsonl`。欧联球队大多来自五大联赛之外，评分表覆盖不全：2026-11-26 首个比赛日 18 场只有 5 场两队都有可用评分（10 支球队评分表里没有，4 支评分停在 2024 年底、超过 120 天），其余不出预测、不猜。
 - 本环境访问 UEFA 需代理，Node 内置 fetch 要加 `NODE_USE_ENV_PROXY=1`；GitHub Actions 里不需要。
 
 ## 台账版本

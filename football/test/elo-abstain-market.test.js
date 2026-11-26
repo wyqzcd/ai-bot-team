@@ -153,3 +153,33 @@ test('快照：同赔率不重复记；只认开赛前的快照；对照与计�
   const sb = marketScoreboard([{ id: 'U1', prediction: row.prediction, result: { ft: [1, 1] } }, { id: 'U2', prediction: row.prediction, result: { ft: [0, 1] } }], { U1: late });
   assert.deepEqual(sb, { n: 1, model: 0, market: 0 }, '没有赔率的场次不计分');
 });
+
+// ---------- 欧联 ----------
+
+test('欧战赛事口径：欧冠与欧联的 UEFA 编号、台账 id 前缀、台账互不混用', async () => {
+  const { COMPETITIONS, UEFA_MATCHES_URL, competitionOf, uclMatchId } = await import('../src/ucl.mjs');
+  const { candidateLedgerFiles, uclLedgerFiles } = await import('../src/pipeline.mjs');
+  assert.equal(COMPETITIONS.uel.uefaId, 14);
+  assert.match(UEFA_MATCHES_URL('2026-11-26', 14), /competitionId=14&fromDate=2026-11-26/);
+  assert.match(UEFA_MATCHES_URL('2026-11-26'), /competitionId=1&/);
+  const m = { kickoff: '2026-11-26T17:45:00Z' };
+  assert.equal(uclMatchId(m, ['Celta', 'Bournemouth'], 'UEL'), 'UEL|2026-11-26|Celta|Bournemouth');
+  assert.equal(uclMatchId(m, ['A', 'B']), 'UCL|2026-11-26|A|B');
+  assert.throws(() => competitionOf('uecl'), /未知赛事/);
+  assert.ok(!uclLedgerFiles().includes(COMPETITIONS.uel.ledger), '欧冠录赛果不会去欧联台账里找');
+  assert.ok(candidateLedgerFiles().includes(COMPETITIONS.uel.ledger), '门禁覆盖欧联台账');
+  assert.ok(!COMPETITIONS.uel.ledgers.some((f) => COMPETITIONS.ucl.ledgers.includes(f)));
+});
+
+test('UEFA 球队对照表：每个非空 Elo 名都在评分表里，编号不重复映射', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { loadUefaTeamMap } = await import('../src/ucl.mjs');
+  const { loadEloCurrent } = await import('../src/elo-update.mjs');
+  const elo = loadEloCurrent();
+  const teams = loadUefaTeamMap();
+  for (const [id, t] of Object.entries(teams)) {
+    assert.match(id, /^\d+$/);
+    if (t.elo !== null) assert.ok(elo.has(t.elo), `${t.uefa} → ${t.elo} 不在 elo-current.csv`);
+  }
+  assert.ok(readFileSync(new URL('../data/uefa-teams.json', import.meta.url), 'utf8').endsWith('\n'));
+});

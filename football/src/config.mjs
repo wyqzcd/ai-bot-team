@@ -28,6 +28,8 @@ export const PATHS = {
   // v2 用推算 Elo（data/elo-current.csv，R-017）。新预测只写 uclLedger；录赛果在全部版本里找对应预测。
   uclLedger: path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate-v2.jsonl'),
   uclLedgers: [path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate.jsonl'), path.join(FOOTBALL_ROOT, 'ledger', 'ucl-candidate-v2.jsonl')],
+  // 欧联候选台账：从一开始就用推算 Elo 口径（R-020）。
+  uelLedger: path.join(FOOTBALL_ROOT, 'ledger', 'uel-candidate.jsonl'),
   anchors: path.join(FOOTBALL_ROOT, 'ledger', 'published.json'),
   // 竞彩编号/中文队名旁注：只用于发布页展示，不参与统计，不进哈希链。
   jczqRefs: path.join(FOOTBALL_ROOT, 'ledger', 'jczq-refs.json'),

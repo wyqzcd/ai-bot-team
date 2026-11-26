@@ -119,19 +119,20 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
     ];
   }))}</div>
 
-<h2>候选：欧冠方向（不作结论）</h2>
-<div class="card muted">Elo 泊松模型（R-012/R-013 在五大联赛联赛内校准），没有任何欧冠样本回测；伤停首发未进模型。只作为候选记录，开赛即锁定。
-评分口径：ucl-candidate = ClubElo 快照（R-014，已被取代，只补录赛果）；ucl-candidate-v2 = 快照 + 五大联赛新比分推算（R-017）。
+<h2>候选：欧战方向（欧冠 / 欧联，不作结论）</h2>
+<div class="card muted">Elo 泊松模型（R-012/R-013 在五大联赛联赛内校准），没有任何欧战样本回测；伤停首发未进模型。只作为候选记录，开赛即锁定。
+评分口径：欧冠 ucl-candidate = ClubElo 快照（R-014，已被取代，只补录赛果）；欧冠 ucl-candidate-v2（R-017）与欧联 uel-candidate（R-020）= 快照 + 五大联赛新比分推算。
 概率差小于 ${eloAbstainRule ? `${eloAbstainRule.sample.filter.maxMargin}（${esc(eloAbstainRule.id)}）` : '—'} 的场次不下判断。
 市场 = 竞彩胜平负赔率去水（开赛前最后一次抓取，只作对照，不进模型）；差 = 模型 − 市场，任一方向差 ≥ 10 个百分点标"分歧大"。</div>
-<div class="scroll">${table(['开赛 (北京时间)', '口径', '对阵', '方向', 'conf', '胜/平/负', '市场', '差（模型−市场）', '赛果', '#'], ucl.map(({ id, label, prediction: p, result: r }) => {
+<div class="scroll">${table(['开赛 (北京时间)', '赛事', '口径', '对阵', '方向', 'conf', '胜/平/负', '市场', '差（模型−市场）', '赛果', '#'], ucl.map(({ id, prediction: p, result: r }) => {
     const abstain = abstainOf(p.probs, eloAbstainRule);
     const snap = preKickoffMarket(uclMarket[id] ? { ...uclMarket[id], kickoff: p.kickoff } : null);
     const cmp = compare(p, snap);
     const signed = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}`;
     return [
       esc(new Date(Date.parse(p.kickoff) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')),
-      label.endsWith('-v2') ? '推算 Elo' : '<span class="muted">快照</span>',
+      ({ UCL: '欧冠', UEL: '欧联' })[p.league] ?? esc(p.league),
+      String(p.model).includes('elo-prop') ? '推算 Elo' : '<span class="muted">快照</span>',
       `${esc(p.home)} vs ${esc(p.away)}${uclMarket[id]?.zh ? `<br><span class="muted">${esc(uclMarket[id].zh.home)} vs ${esc(uclMarket[id].zh.away)}</span>` : ''}`,
       abstain ? `<b>不下判断</b><br><span class="muted">台账记 ${PICK_LABEL[p.pick]}</span>` : PICK_LABEL[p.pick], pct(p.conf),
       p.probs.map(pct).join(' / '),
@@ -142,7 +143,7 @@ code { font-size:12px; word-break:break-all; color:var(--accent); } ul.gates { l
   }))}</div>
 ${(() => {
     const sb = marketScoreboard(ucl, uclMarket);
-    return sb.n ? `<div class="card">有赔率且已结算 ${sb.n} 场：模型方向命中 ${sb.model}，竞彩热门命中 ${sb.market}。<span class="muted">样本极小，只作记录。</span></div>` : '<div class="card muted">还没有带赔率的已结算欧冠场次（赔率需在开赛前用 football/bin/ucl-market.mjs 记录）。</div>';
+    return sb.n ? `<div class="card">有赔率且已结算 ${sb.n} 场：模型方向命中 ${sb.model}，竞彩热门命中 ${sb.market}。<span class="muted">样本极小，只作记录。</span></div>` : '<div class="card muted">还没有带赔率的已结算欧战场次（赔率需在开赛前用 football/bin/ucl-market.mjs 记录）。</div>';
   })()}
 
 <h2>实盘战绩</h2>

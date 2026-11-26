@@ -1,7 +1,7 @@
 # 足球比赛日定时闭环：每天 12:07 UTC（北京时间 20:07），14:37 UTC 备用
-#   1. 录前一天欧冠赛果（UEFA 官方）     2. 抓当天欧冠赛程并出候选预测（开赛前写入，开赛即锁定）
+#   1. 录前一天欧冠、欧联赛果（UEFA 官方）     2. 抓当天欧冠、欧联赛程并出候选预测（开赛前写入，开赛即锁定）
 #   3. 8 道机械门禁 → 发布页 + 发布锚点  4. 开 PR（带 bot-authored 标签）交人工审
-# 台账无变化（当天没有欧冠、前一天也没有）就什么都不做。
+# 台账无变化（当天没有欧战、前一天也没有）就什么都不做。
 # 台账是哈希链，只能串行追加：若上一个比赛日 PR 还没合并，就接在它的分支上继续追加、更新同一个 PR（滚动 PR），
 # 不会出现两个 PR 同时追加导致冲突，也保证前一天的预测能被录上赛果。
 # 例行数据通道：只改台账/快照/发布页、门禁测试全过、且对照 main 证明台账只追加不改写时自动 squash 合并（见 config/trust.json 的 routineData）；
@@ -19,7 +19,7 @@ on:
   schedule:
     - cron: '7 12 * * *'
     # 备用触发：GitHub 定时任务高峰期会延迟或跳过（2026-11-25 的 12:07 就没触发）。
-    # 本工作流是幂等的：主触发已跑过时，备用这次会发现台账无变化直接结束。仍早于欧冠最早 17:45 UTC 开球。
+    # 本工作流是幂等的：主触发已跑过时，备用这次会发现台账无变化直接结束。仍早于欧战最早 17:45 UTC 开球（GitHub 定时任务可能大幅延迟，赶不上时手动触发）。
     - cron: '37 14 * * *'
   workflow_dispatch:
     inputs:
@@ -69,13 +69,18 @@ jobs:
           echo "today=$TODAY" >> "$GITHUB_OUTPUT"
           echo "yesterday=$(date -u -d "$TODAY -1 day" +%F)" >> "$GITHUB_OUTPUT"
 
-      - name: 录前一天欧冠赛果
-        run: node football/bin/ucl-results.mjs --date ${{ steps.d.outputs.yesterday }}
-
-      - name: 抓当天欧冠赛程并出候选预测
+      - name: 录前一天欧冠、欧联赛果
         run: |
-          node football/bin/ucl.mjs --fetch --date ${{ steps.d.outputs.today }}
-          node football/bin/ucl.mjs --date ${{ steps.d.outputs.today }} --skip-missing
+          for C in ucl uel; do
+            node football/bin/ucl-results.mjs --competition $C --date ${{ steps.d.outputs.yesterday }}
+          done
+
+      - name: 抓当天欧冠、欧联赛程并出候选预测
+        run: |
+          for C in ucl uel; do
+            node football/bin/ucl.mjs --competition $C --fetch --date ${{ steps.d.outputs.today }}
+            node football/bin/ucl.mjs --competition $C --date ${{ steps.d.outputs.today }} --skip-missing
+          done
 
       - name: 台账有变化吗
         id: changed
@@ -112,7 +117,7 @@ jobs:
             gh pr comment "$OPEN" --body "已追加 ${{ steps.d.outputs.today }} 比赛日：录入 ${{ steps.d.outputs.yesterday }} 赛果、写入当天候选预测，门禁通过。" || true
             exit 0
           fi
-          BODY="自动比赛日闭环：录入 ${{ steps.d.outputs.yesterday }} 欧冠赛果、写入 ${{ steps.d.outputs.today }} 欧冠候选预测（开赛前已推送，推送时间即赛前证据）、8 道门禁通过后更新发布页与发布锚点。
+          BODY="自动比赛日闭环：录入 ${{ steps.d.outputs.yesterday }} 欧战赛果、写入 ${{ steps.d.outputs.today }} 欧战（欧冠 / 欧联）候选预测（开赛前已推送，推送时间即赛前证据）、8 道门禁通过后更新发布页与发布锚点。
 
           满足例行数据条件（只追加、不改写 main 上已发布的台账）时会自动合并并重新部署发布页；否则留待人工 review。"
           gh pr create --base main --head "$BRANCH" --title "chore(football): ${{ steps.d.outputs.today }} 比赛日闭环" --body "$BODY" --label bot-authored \

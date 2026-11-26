@@ -1,0 +1,168 @@
+{
+  "source": "https://match.uefa.com/v5/matches?competitionId=1&fromDate=2026-11-25&toDate=2026-11-25&order=ASC&offset=0&limit=60",
+  "fetchedAt": "2026-11-26T13:25:58Z",
+  "matches": [
+    {
+      "uefaMatchId": "2049641",
+      "kickoff": "2026-11-25T17:45:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T19:38:35.162Z",
+      "score": {
+        "away": 1,
+        "home": 0
+      },
+      "home": {
+        "id": "52498",
+        "name": "Slavia Praha"
+      },
+      "away": {
+        "id": "70691",
+        "name": "Villarreal"
+      }
+    },
+    {
+      "uefaMatchId": "2049642",
+      "kickoff": "2026-11-25T17:45:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T19:34:41.561Z",
+      "score": {
+        "away": 4,
+        "home": 1
+      },
+      "home": {
+        "id": "2609356",
+        "name": "Sabah"
+      },
+      "away": {
+        "id": "50080",
+        "name": "Barcelona"
+      }
+    },
+    {
+      "uefaMatchId": "2049634",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:54:12.447Z",
+      "score": {
+        "away": 2,
+        "home": 2
+      },
+      "home": {
+        "id": "52747",
+        "name": "Paris"
+      },
+      "away": {
+        "id": "50137",
+        "name": "Roma"
+      }
+    },
+    {
+      "uefaMatchId": "2049635",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:53:14.731Z",
+      "score": {
+        "away": 0,
+        "home": 2
+      },
+      "home": {
+        "id": "50138",
+        "name": "Inter"
+      },
+      "away": {
+        "id": "50107",
+        "name": "Stuttgart"
+      }
+    },
+    {
+      "uefaMatchId": "2049636",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:51:08.363Z",
+      "score": {
+        "away": 0,
+        "home": 2
+      },
+      "home": {
+        "id": "50124",
+        "name": "Atleti"
+      },
+      "away": {
+        "id": "52319",
+        "name": "Viking"
+      }
+    },
+    {
+      "uefaMatchId": "2049637",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:55:02.535Z",
+      "score": {
+        "away": 2,
+        "home": 2
+      },
+      "home": {
+        "id": "50149",
+        "name": "Sporting CP"
+      },
+      "away": {
+        "id": "52682",
+        "name": "Man Utd"
+      }
+    },
+    {
+      "uefaMatchId": "2049638",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:54:19.027Z",
+      "score": {
+        "away": 3,
+        "home": 0
+      },
+      "home": {
+        "id": "50043",
+        "name": "Club Brugge"
+      },
+      "away": {
+        "id": "7889",
+        "name": "Liverpool"
+      }
+    },
+    {
+      "uefaMatchId": "2049639",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:52:02.280Z",
+      "score": {
+        "away": 1,
+        "home": 2
+      },
+      "home": {
+        "id": "75797",
+        "name": "Lille"
+      },
+      "away": {
+        "id": "50037",
+        "name": "Bayern München"
+      }
+    },
+    {
+      "uefaMatchId": "2049640",
+      "kickoff": "2026-11-25T20:00:00Z",
+      "status": "FINISHED",
+      "fullTimeAt": "2026-11-25T21:54:22.950Z",
+      "score": {
+        "away": 1,
+        "home": 0
+      },
+      "home": {
+        "id": "52707",
+        "name": "Shakhtar"
+      },
+      "away": {
+        "id": "52692",
+        "name": "Fenerbahçe"
+      }
+    }
+  ]
+}

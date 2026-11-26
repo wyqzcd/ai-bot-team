@@ -1,0 +1,259 @@
+{
+  "source": "https://match.uefa.com/v5/matches?competitionId=14&fromDate=2026-11-26&toDate=2026-11-26&order=ASC&offset=0&limit=60",
+  "fetchedAt": "2026-11-26T13:26:00Z",
+  "date": "2026-11-26",
+  "matches": [
+    {
+      "uefaMatchId": "2050131",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "2610",
+        "name": "Olympiacos"
+      },
+      "away": {
+        "id": "50058",
+        "name": "Milan"
+      }
+    },
+    {
+      "uefaMatchId": "2050132",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52748",
+        "name": "Marseille"
+      },
+      "away": {
+        "id": "50044",
+        "name": "Levski Sofia"
+      }
+    },
+    {
+      "uefaMatchId": "2050134",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "64388",
+        "name": "Viktoria Plzeň"
+      },
+      "away": {
+        "id": "50147",
+        "name": "Benfica"
+      }
+    },
+    {
+      "uefaMatchId": "2050135",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "64125",
+        "name": "Union SG"
+      },
+      "away": {
+        "id": "64227",
+        "name": "Lech Poznań"
+      }
+    },
+    {
+      "uefaMatchId": "2050136",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50164",
+        "name": "GNK Dinamo"
+      },
+      "away": {
+        "id": "50109",
+        "name": "Leverkusen"
+      }
+    },
+    {
+      "uefaMatchId": "2050137",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50030",
+        "name": "Salzburg"
+      },
+      "away": {
+        "id": "2610304",
+        "name": "Ararat-Armenia"
+      }
+    },
+    {
+      "uefaMatchId": "2050141",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "53043",
+        "name": "Celta"
+      },
+      "away": {
+        "id": "2601124",
+        "name": "Bournemouth"
+      }
+    },
+    {
+      "uefaMatchId": "2050143",
+      "kickoff": "2026-11-26T17:45:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50157",
+        "name": "Beşiktaş"
+      },
+      "away": {
+        "id": "59340",
+        "name": "H. Beer-Sheva"
+      }
+    },
+    {
+      "uefaMatchId": "2050129",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50139",
+        "name": "Juventus"
+      },
+      "away": {
+        "id": "50077",
+        "name": "Omonia"
+      }
+    },
+    {
+      "uefaMatchId": "2050130",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "5312",
+        "name": "Lyon"
+      },
+      "away": {
+        "id": "52314",
+        "name": "Lillestrøm"
+      }
+    },
+    {
+      "uefaMatchId": "2050133",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52298",
+        "name": "Ferencváros"
+      },
+      "away": {
+        "id": "59030",
+        "name": "Celje"
+      }
+    },
+    {
+      "uefaMatchId": "2050138",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "50033",
+        "name": "Sparta Praha"
+      },
+      "away": {
+        "id": "52327",
+        "name": "AZ Alkmaar"
+      }
+    },
+    {
+      "uefaMatchId": "2050139",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52916",
+        "name": "Crystal Palace"
+      },
+      "away": {
+        "id": "50123",
+        "name": "Real Sociedad"
+      }
+    },
+    {
+      "uefaMatchId": "2050140",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "53360",
+        "name": "Sunderland"
+      },
+      "away": {
+        "id": "2600277",
+        "name": "Jagiellonia"
+      }
+    },
+    {
+      "uefaMatchId": "2050142",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "2600431",
+        "name": "Hoffenheim"
+      },
+      "away": {
+        "id": "50111",
+        "name": "Sturm Graz"
+      }
+    },
+    {
+      "uefaMatchId": "2050144",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "2603107",
+        "name": "Torreense"
+      },
+      "away": {
+        "id": "50050",
+        "name": "Celtic"
+      }
+    },
+    {
+      "uefaMatchId": "2050145",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52330",
+        "name": "N.E.C."
+      },
+      "away": {
+        "id": "55031",
+        "name": "Rennes"
+      }
+    },
+    {
+      "uefaMatchId": "2050146",
+      "kickoff": "2026-11-26T20:00:00Z",
+      "status": "UPCOMING",
+      "phase": "League Phase",
+      "home": {
+        "id": "52953",
+        "name": "OFI Crete"
+      },
+      "away": {
+        "id": "50074",
+        "name": "Anderlecht"
+      }
+    }
+  ]
+}

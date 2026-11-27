@@ -1,6 +1,6 @@
 {
-  "publishedAt": "2026-11-26T13:26:04Z",
-  "report": "../reports/2026-11-26.html",
+  "publishedAt": "2026-11-27T21:08:12Z",
+  "report": "../reports/2026-11-27.html",
   "backtest-v3": {
     "entries": 25114,
     "lastHash": "15c685f1b7b27381"
@@ -26,8 +26,8 @@
     "lastHash": "8c29a740ceec501c"
   },
   "uel-candidate": {
-    "entries": 5,
-    "lastHash": "a08a38e559926704"
+    "entries": 10,
+    "lastHash": "ac115a06ad2bab28"
   },
   "registry": {
     "R-001": {
